@@ -1,0 +1,126 @@
+:root {
+    --bg: #ffffff;
+    --text: #111111;
+    --accent: #2563eb;
+    --warning: #dc2626;
+    --card: #f3f4f6;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --text: #f3f4f6;
+      --accent: #3b82f6;
+      --warning: #f87171;
+      --card: #2e2e2e;
+    }
+  }
+  
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    width: 280px;
+    padding: 16px;
+  }
+  
+  .container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  h1 {
+    font-size: 20px;
+    margin: 0;
+    color: var(--accent);
+  }
+  
+  .counter-box {
+    background-color: var(--card);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+  
+  .counter-text {
+    margin: 0;
+    font-size: 14px;
+  }
+  
+  .counter-number {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 4px 0;
+  }
+  
+  .status-message {
+    margin: 4px 0 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  .status-message.warning {
+    color: var(--warning);
+  }
+  
+  .status-message.normal {
+    color: var(--accent);
+  }
+  
+  .toggle-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .toggle-label {
+    font-size: 14px;
+  }
+  
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+  }
+  
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    background-color: #ccc;
+    border-radius: 34px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transition: 0.4s;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.4s;
+  }
+  
+  input:checked + .slider {
+    background-color: var(--accent);
+  }
+  
+  input:checked + .slider:before {
+    transform: translateX(16px);
+  }
+  

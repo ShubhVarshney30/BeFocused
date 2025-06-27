@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Stats</title>
+  <link rel="stylesheet" href="stats.css" />
+  <script src="chart.min.js"></script>
+</head>
+<body>
+  <h1>📊 Focus Stats</h1>
+
+  <div class="toggle">
+    <label>
+      <input type="checkbox" id="darkModeToggle" />
+      Dark Mode
+    </label>
+  </div>
+
+  <div class="stats-box">
+    <div class="stat">
+      <strong>Tab Switches This Session:</strong>
+      <p id="tabSwitches">0</p>
+    </div>
+    <div class="stat">
+      <strong>Longest Focus Streak:</strong>
+      <p id="focusStreak">0 min</p>
+    </div>
+    <div class="stat">
+      <strong>Time-Warp Triggered:</strong>
+      <p id="warpDays">0 times today</p>
+    </div>
+  </div>
+
+  <canvas id="usageChart"></canvas>
+  <a class="back" href="popup.html">← Back to Popup</a>
+
+  <!-- ✅ ONLY reference external JS here -->
+  <script src="stats.js"></script>
+</body>
+</html>

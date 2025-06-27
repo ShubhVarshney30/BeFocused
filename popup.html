@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tab Monitor</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Tab Monitor</h1>
+
+    <div class="counter-box">
+      <p class="counter-text">Tabs switched in last 20 min:</p>
+      <p id="tabCount" class="counter-number">0</p>
+      <p id="statusMessage" class="status-message normal">You’re staying focused!</p>
+    </div>
+
+    <div class="toggle-section">
+      <label class="switch">
+        <input type="checkbox" id="toggleAlert" checked />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Enable Alerts</span>
+    </div>
+
+    <div class="toggle-section">
+      <label class="switch">
+        <input type="checkbox" id="toggleWarp" checked />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Enable Time-Warp UI</span>
+    </div>
+
+    <div style="text-align:center; margin-top: 20px;">
+      <a href="stats.html" target="_blank" style="text-decoration: none; color: #007BFF;">
+        📊 View Focus Stats
+      </a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
