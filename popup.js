@@ -163,3 +163,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   restoreSprintState();
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+  const toggle = document.getElementById('toggle-blur');
+
+  // 1️⃣ Load saved state (defaults to true)
+  chrome.storage.sync.get({ blurEnabled: true }, (data) => {
+    toggle.checked = data.blurEnabled;
+  });
+
+  // 2️⃣ Save state whenever user toggles
+  toggle.addEventListener('change', () => {
+    chrome.storage.sync.set({ blurEnabled: toggle.checked });
+  });
+});
