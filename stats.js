@@ -1,3 +1,5 @@
+// stats.js
+
 const toggle = document.getElementById('darkModeToggle');
 
 // Load saved theme
@@ -8,7 +10,6 @@ chrome.storage.local.get('darkMode', (data) => {
   }
 });
 
-// Toggle dark mode
 toggle.addEventListener('change', () => {
   const isDark = toggle.checked;
   document.body.classList.toggle('dark', isDark);
@@ -19,11 +20,13 @@ toggle.addEventListener('change', () => {
 chrome.storage.local.get([
   'tabSwitchCount',
   'longestFocusStreak',
-  'warpTriggeredDays'
+  'warpTriggeredDays',
+  'userPoints'
 ], (data) => {
   const switchCount = data.tabSwitchCount || 0;
   const streak = data.longestFocusStreak || 0;
   const warpDays = data.warpTriggeredDays || {};
+  const points = data.userPoints || 0;
 
   const today = new Date().toISOString().split("T")[0];
   const todayTriggers = warpDays[today] || 0;
@@ -31,6 +34,12 @@ chrome.storage.local.get([
   document.getElementById('tabSwitches').innerText = switchCount;
   document.getElementById('focusStreak').innerText = `${streak} min`;
   document.getElementById('warpDays').innerText = `${todayTriggers} times today`;
+
+  // Optional: Add points display if using a stat block
+  const pointsEl = document.getElementById('pointsEarned');
+  if (pointsEl) {
+    pointsEl.innerText = `${points} pts`;
+  }
 
   new Chart(document.getElementById('usageChart'), {
     type: 'doughnut',

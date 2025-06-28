@@ -2,71 +2,52 @@ let tabSwitchTimestamps = [];
 const TIME_WINDOW_MINUTES = 20;
 const MAX_TIME = TIME_WINDOW_MINUTES * 60 * 1000;
 const THRESHOLD = 10;
+const POINTS_KEY = 'userPoints';
+const FOCUS_SPRINT_DURATION = 25 * 60 * 1000; // 25 minutes
+const POINTS_PER_SPRINT = 10;
 
-// Initialize storage on install
+// ✅ Global timeout to allow cancellation
+let sprintTimeout = null;
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
     tabSwitchCount: 0,
-    alertsEnabled: true
-  });
-
-  // 🔔 Test notification (for debugging)
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icon.png',
-    title: 'Extension Ready',
-    message: 'Tab Monitor is now tracking!',
-    priority: 2
+    alertsEnabled: true,
+    timeWarpEnabled: true,
+    userPoints: 0,
+    sprintActive: false
   });
 });
 
-// On tab switch
+// 🔁 Tab Switch Tracking
 chrome.tabs.onActivated.addListener(() => {
   const now = Date.now();
-
-  // Filter out old timestamps
-  tabSwitchTimestamps = tabSwitchTimestamps.filter(
-    ts => now - ts < MAX_TIME
-  );
-
-  // Add new timestamp
+  tabSwitchTimestamps = tabSwitchTimestamps.filter(ts => now - ts < MAX_TIME);
   tabSwitchTimestamps.push(now);
 
-  // Update tab switch count
   const count = tabSwitchTimestamps.length;
   chrome.storage.local.set({ tabSwitchCount: count });
 
-  // Notification check
   if (count > THRESHOLD) {
-    chrome.storage.local.get('alertsEnabled', (data) => {
+    chrome.storage.local.get(['alertsEnabled', POINTS_KEY], (data) => {
       if (data.alertsEnabled) {
-        showNotification();
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'Tab Monitor Alert',
+          message: 'Please stop — too many tab switches in 20 minutes.',
+          priority: 2
+        });
+
+        chrome.storage.local.set({
+          userPoints: (data[POINTS_KEY] || 0) - 5
+        });
       }
     });
   }
 });
 
-// Show notification safely
-function showNotification() {
-  chrome.notifications.getPermissionLevel(level => {
-    if (level === "granted") {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon.png',
-        title: 'Tab Monitor Alert',
-        message: 'Please stop — too many tab switches in 20 minutes.',
-        priority: 2
-      });
-    }
-  });
-}
-
-// Optional: Manual test by clicking extension icon
-chrome.action.onClicked.addListener(() => {
-  showNotification();
-});
-
-// Storage cleanup every hour
+// 🔁 Cleanup tab switch counter every hour
 chrome.alarms.create('cleanup', { periodInMinutes: 60 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'cleanup') {
@@ -74,3 +55,53 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     chrome.storage.local.set({ tabSwitchCount: 0 });
   }
 });
+
+// 🚀 Sprint Start/Stop Listener
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local') {
+    if (changes.sprintActive?.newValue === true) {
+      startFocusSprint();
+    }
+
+    if (changes.sprintActive?.newValue === false) {
+      stopFocusSprint();
+    }
+  }
+});
+
+// 🟢 Start Sprint Handler
+function startFocusSprint() {
+  console.log("🎯 Focus sprint started");
+
+  sprintTimeout = setTimeout(() => {
+    chrome.storage.local.get(POINTS_KEY, (data) => {
+      const newPoints = (data[POINTS_KEY] || 0) + POINTS_PER_SPRINT;
+
+      chrome.storage.local.set({
+        userPoints: newPoints,
+        sprintActive: false
+      });
+
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'Focus Sprint Complete 🎉',
+        message: `You earned +${POINTS_PER_SPRINT} points! Take a 2-min break now.`,
+        priority: 2
+      });
+
+      chrome.tabs.create({
+        url: chrome.runtime.getURL('break.html')
+      });
+    });
+  }, FOCUS_SPRINT_DURATION);
+}
+
+// ⛔ Stop Sprint Handler
+function stopFocusSprint() {
+  if (sprintTimeout) {
+    clearTimeout(sprintTimeout);
+    sprintTimeout = null;
+    console.log("⛔ Focus sprint manually stopped.");
+  }
+}
