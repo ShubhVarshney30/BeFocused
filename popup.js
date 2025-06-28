@@ -177,3 +177,58 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ blurEnabled: toggle.checked });
   });
 });
+
+
+
+// focusmode js editition
+
+/* Focus Mode – popup controller (hostname edition) */
+const siteEl   = document.getElementById("fm-site");
+const minsEl   = document.getElementById("fm-minutes");
+const startBtn = document.getElementById("fm-start");
+const stopBtn  = document.getElementById("fm-stop");
+const statusEl = document.getElementById("fm-status");
+
+/* ── utilities ──────────────────────────────────────────────── */
+function extractHostname(input) {
+  // Accept bare domain or full URL
+  try {
+    if (!/^[a-z][a-z\d+\-.]*:\/\//i.test(input)) {
+      input = "https://" + input.trim();
+    }
+    return new URL(input).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function showStatus(host, end) {
+  statusEl.textContent =
+    `Only “${host}” allowed until ${new Date(end).toLocaleTimeString()}.`;
+}
+
+/* ── load active session (if any) ───────────────────────────── */
+(async () => {
+  const { focusHost, focusEnd } = await chrome.storage.local.get(["focusHost", "focusEnd"]);
+  if (focusHost && focusEnd && Date.now() < focusEnd) showStatus(focusHost, focusEnd);
+})();
+
+/* ── actions ────────────────────────────────────────────────── */
+startBtn.onclick = async () => {
+  const host = extractHostname(siteEl.value);
+  const mins = parseInt(minsEl.value, 10);
+
+  if (!host || !mins || mins <= 0) {
+    alert("Enter a valid domain/URL and time.");
+    return;
+  }
+
+  const end = Date.now() + mins * 60_000;
+  await chrome.storage.local.set({ focusHost: host, focusEnd: end });
+  showStatus(host, end);
+};
+
+stopBtn.onclick = async () => {
+  await chrome.storage.local.remove(["focusHost", "focusEnd"]);
+  statusEl.textContent = "Focus Mode disabled.";
+};

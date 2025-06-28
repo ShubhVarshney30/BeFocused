@@ -27,6 +27,11 @@
   },
   "content_scripts": [
     {
+       "matches": ["<all_urls>"],
+       "js": ["focusContent.js"],
+       "run_at": "document_start"
+    },
+    {
       "matches": ["<all_urls>"],
       "js": ["timeWarp.js"],
       "run_at": "document_idle"
@@ -48,6 +53,10 @@
     }
   ],
   "web_accessible_resources": [
+    {
+      "resources": ["focusblock.html", "focustyle.css"],
+      "matches": ["<all_urls>"]
+    },
     {
       "resources": [
         "stats.html",

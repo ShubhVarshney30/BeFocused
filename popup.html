@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tab Monitor</title>
-  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="popup.css" />]
+  <link rel="stylesheet" href="style.css">
   <style>
     /* Optional: fallback styling if popup.css fails */
     body {
@@ -76,19 +77,19 @@
     </div>
 
     <!-- Focus Mode -->
-    <div id="focus-mode-section" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
-      <h3>Focus Mode</h3>
-      <form id="focus-form">
-        <label for="focus-url">Website URL:</label><br>
-        <input type="url" id="focus-url" placeholder="example.com" required style="width: 100%;"><br><br>
+    <div class="fm-wrap" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <h2>🎯 Focus Mode</h2>
 
-        <label for="focus-duration">Duration (minutes):</label><br>
-        <input type="number" id="focus-duration" min="1" required style="width: 100%;"><br><br>
-
-        <button type="submit" id="start-focus-btn">Start Focus</button>
-        <button type="button" id="stop-focus-btn" style="display:none; margin-left: 10px;">Stop Focus</button>
-      </form>
-      <div id="focus-status" style="margin-top: 10px;"></div>
+      <label>Allowed domain or URL</label>
+      <input id="fm-site" type="text" placeholder="example.com or https://docs.example.com">
+    
+      <label>Duration (minutes)</label>
+      <input id="fm-minutes" type="number" min="1" placeholder="25">
+    
+      <button id="fm-start">Start</button>
+      <button id="fm-stop" class="secondary">Stop / Reset</button>
+    
+      <p id="fm-status" class="small"></p>
     </div>
 
     <!-- Points & Focus Sprint -->
