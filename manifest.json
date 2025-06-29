@@ -40,6 +40,11 @@
       ],
       "js": ["focusSprint.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["ytblur.js"],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [

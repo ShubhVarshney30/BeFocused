@@ -9,24 +9,30 @@
   window.__focusSprint.sprintEnd = null;
   window.__focusSprint.sprintInterval = null;
 
-  const SPRINT_DURATION = 25 * 60 * 1000;
+  const SPRINT_DURATION =  25 * 1000; // 25 minutes for testing
   const BREAK_DURATION = 2 * 60 * 1000;
 
-  // ✅ Start check when window loads
+  const DISTRACTION_MESSAGES = [
+    "🚫 Stop scrolling! Your time is valuable.",
+    "📚 Reminder: You promised to stay focused.",
+    "⏳ Time flies! Don't waste it on reels.",
+    "💡 Great ideas are built with focus, not distractions.",
+    "🔒 Your future self will thank you for this discipline.",
+    "❌ You're investing in regret. Choose growth instead.",
+    "⚠️ Warning: This path leads to wasted potential."
+  ];
+
   window.addEventListener("load", () => {
-    chrome.storage.local.get('sprintActive', (data) => {
-      if (data.sprintActive) {
-        startSprint();
-      }
+    chrome.storage.local.get(['sprintActive'], (data) => {
+      if (data.sprintActive) startSprint();
     });
   });
 
-  // ✅ Re-check when user switches back to the tab
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       chrome.storage.local.get('sprintActive', (data) => {
         if (data.sprintActive) {
-          blockDistractions(); // Re-block if needed
+          blockDistractions();
         }
       });
     }
@@ -51,7 +57,7 @@
 
     updateProgressBar(remaining / SPRINT_DURATION);
     updateCountdownDisplay(remaining);
-    blockDistractions(); // Continuously block
+    blockDistractions();
 
     if (remaining <= 0) finishSprint();
   }
@@ -61,6 +67,14 @@
     window.__focusSprint.sprintActive = false;
     chrome.storage.local.set({ sprintActive: false });
     removeProgressBar();
+
+    // ✅ Reward points
+    chrome.storage.local.get(['userPoints'], (data) => {
+      let currentPoints = data.userPoints ?? 0;
+      currentPoints += 20; // Reward 20 points for successful sprint
+      chrome.storage.local.set({ userPoints: currentPoints });
+    });
+
     showBreak();
   }
 
@@ -84,7 +98,7 @@
     bar.style.cssText = `
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, #4caf50, #81c784);
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
       transition: width 1s linear;
     `;
 
@@ -94,12 +108,13 @@
       position: fixed;
       top: 10px;
       right: 15px;
-      color: #4caf50;
+      color: #0072ff;
       font-size: 14px;
       font-family: Arial, sans-serif;
       background: white;
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       z-index: 9999999;
     `;
 
@@ -133,26 +148,48 @@
     const host = window.location.hostname;
     const path = window.location.pathname;
 
-    const isYouTubeShorts = host.includes('youtube.com') && path.startsWith('/shorts');
-    const isInstagramReels = host.includes('instagram.com') && path.includes('/reels');
-    const isFacebookWatch = host.includes('facebook.com') && path.includes('/watch');
-    const isNetflix = host.includes('netflix.com');
+    const isBlocked = (
+      host.includes('youtube.com') && path.startsWith('/shorts') ||
+      host.includes('instagram.com') && path.includes('/reels') ||
+      host.includes('facebook.com') && path.includes('/watch') ||
+      host.includes('netflix.com')
+    );
 
-    if (isYouTubeShorts || isInstagramReels || isFacebookWatch || isNetflix) {
-      if (!document.getElementById('__blockOverlay')) {
-        document.body.innerHTML = `
-          <div id="__blockOverlay" style="
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-size: 20px;
-            color: red;
-            font-family: sans-serif;
-            text-align: center;">
-            🚫 Entertainment content is blocked during Focus Sprint. Get back to your goals!
-          </div>`;
-      }
+    if (isBlocked && !document.getElementById('__blockOverlay')) {
+      const randomMessage = DISTRACTION_MESSAGES[Math.floor(Math.random() * DISTRACTION_MESSAGES.length)];
+
+      document.body.innerHTML = `
+        <div id="__blockOverlay" style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          background: #fff5f5;
+          font-family: 'Segoe UI', sans-serif;
+          text-align: center;
+          color: #c0392b;
+        ">
+          <img src='https://cdn-icons-png.flaticon.com/512/3075/3075977.png' width="100" alt="focus icon" style="margin-bottom: 20px;" />
+          <h2>⏰ Focus Alert</h2>
+          <p style="font-size: 18px; max-width: 90%;">${randomMessage}</p>
+          <p style="margin-top: 10px; color: #555;">⚠️ Redirecting you to a better place to focus 🎯</p>
+          <button id="unlockBtn" style="
+            margin-top: 30px;
+            padding: 10px 16px;
+            background: #d63031;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+          ">I Understand, Let Me Go</button>
+        </div>
+      `;
+
+      document.getElementById('unlockBtn')?.addEventListener('click', () => {
+        window.location.href = 'https://www.youtube.com'; // Redirect to main YouTube (not Shorts)
+      });
     }
   }
 

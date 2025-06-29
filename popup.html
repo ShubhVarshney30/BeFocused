@@ -2,107 +2,204 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tab Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Focus Dashboard</title>
   <link rel="stylesheet" href="popup.css" />
   <style>
-    /* Optional: fallback styling if popup.css fails */
     body {
-      font-family: Arial, sans-serif;
-      padding: 10px;
-      width: 300px;
+      font-family: 'Segoe UI', sans-serif;
+      padding: 16px;
+      width: 340px;
+      background: linear-gradient(to bottom right, #e3f2fd, #ffffff);
+      color: #1a237e;
     }
-    .container {
+    h1 {
+      font-size: 22px;
+      margin-bottom: 14px;
+      color: #0d47a1;
       text-align: center;
     }
+    .section {
+      margin-bottom: 18px;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
     .counter-number {
-      font-size: 28px;
+      font-size: 30px;
       font-weight: bold;
+      text-align: center;
+    }
+    .status-message {
+      text-align: center;
+      margin-top: 8px;
     }
     .status-message.warning {
-      color: red;
+      color: #e53935;
     }
     .toggle-section {
       display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .toggle-wrapper {
+      display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin: 10px 0;
     }
     .toggle-label {
       margin-left: 10px;
+      font-weight: 500;
+    }
+    input[type="checkbox"] {
+      transform: scale(1.3);
+    }
+    #pointsDisplay, #penaltyDisplay, #netPointsDisplay, #streakDisplay {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 6px 0;
+    }
+    #penaltyDisplay { color: #d32f2f; }
+    #netPointsDisplay { color: #0072ff; }
+    #streakDisplay { color: #4caf50; }
+    #wastedTimeDisplay {
+      font-size: 14px;
+      color: #424242;
+      margin-top: 8px;
+      text-align: center;
+    }
+    #sprintCountdown {
+      font-size: 24px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 10px;
+      color: #0072ff;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    #sprintTimerContainer {
+      text-align: center;
+      animation: glowBreath 2.5s ease-in-out infinite;
+    }
+    #sprintProgress {
+      width: 100%;
+      height: 14px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #e0e0e0;
+    }
+    #sprintProgress::-webkit-progress-value {
+      background: linear-gradient(to right, #00c6ff, #0072ff);
+      animation: progressGlow 2s linear infinite;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: transform 0.2s ease;
+      box-shadow: 0 0 12px rgba(0, 114, 255, 0.25);
+    }
+    #startSprintBtn {
+      background: linear-gradient(to right, #00c853, #43a047);
+      color: white;
+    }
+    #stopSprintBtn {
+      background: linear-gradient(to right, #e53935, #b71c1c);
+      color: white;
+      display: none;
+    }
+    #resetStatsBtn {
+      background: #cfd8dc;
+      color: #37474f;
+    }
+    button:hover {
+      transform: scale(1.03);
+    }
+    .link-button {
+      display: block;
+      text-align: center;
+      margin-top: 12px;
+      color: #0072ff;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.85; }
+    }
+    @keyframes glowBreath {
+      0% { box-shadow: 0 0 10px rgba(0, 114, 255, 0.2); }
+      50% { box-shadow: 0 0 25px rgba(0, 114, 255, 0.5); }
+      100% { box-shadow: 0 0 10px rgba(0, 114, 255, 0.2); }
+    }
+    @keyframes progressGlow {
+      0%, 100% { box-shadow: 0 0 6px rgba(0, 114, 255, 0.3); }
+      50% { box-shadow: 0 0 12px rgba(0, 114, 255, 0.5); }
+    }
+    .warning-animate {
+      animation: shake 0.4s ease-in-out 3;
+    }
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+      100% { transform: translateX(0); }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Tab Monitor</h1>
+  <h1>🧠 Focus Dashboard</h1>
+  <div class="section">
+    <p style="text-align:center;">Tab switches in last 20 min:</p>
+    <p id="tabCount" class="counter-number">0</p>
+    <p id="statusMessage" class="status-message">You're doing great!</p>
+    <p id="motivationStatus" style="font-weight: bold; font-size: 14px; text-align:center; color: #0072ff;">
+      ✨ Stay focused and watch yourself rise!
+    </p>
+  </div>
 
-    <!-- Tab Switch Counter -->
-    <div class="counter-box">
-      <p class="counter-text">Tabs switched in last 20 min:</p>
-      <p id="tabCount" class="counter-number">0</p>
-      <p id="statusMessage" class="status-message normal">You're staying focused!</p>
+  <div class="section toggle-section">
+    <div class="toggle-wrapper">
+      <input type="checkbox" id="toggleAlert"/>
+      <label class="toggle-label">Enable Alerts</label>
     </div>
-
-    <!-- Alert Toggles -->
-    <div class="toggle-section">
-      <label class="switch">
-        <input type="checkbox" id="toggleAlert" checked />
-        <span class="slider"></span>
-      </label>
-      <span class="toggle-label">Enable Alerts</span>
+    <div class="toggle-wrapper">
+      <input type="checkbox" id="toggleWarp"/>
+      <label class="toggle-label">Time‑Warp UI</label>
     </div>
-
-    <div class="toggle-section">
-      <label class="switch">
-        <input type="checkbox" id="toggleWarp" checked />
-        <span class="slider"></span>
-      </label>
-      <span class="toggle-label">Enable Time-Warp UI</span>
-    </div>
-
-    <!-- Focus Stats Link -->
-    <div style="margin-top: 20px;">
-      <a href="stats.html" target="_blank" style="text-decoration: none; color: #007BFF;">
-        📊 View Focus Stats
-      </a>
-    </div>
-
-    <!-- Focus Mode -->
-    <div id="focus-mode-section" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
-      <h3>Focus Mode</h3>
-      <form id="focus-form">
-        <label for="focus-url">Website URL:</label><br>
-        <input type="url" id="focus-url" placeholder="https://example.com" required style="width: 100%;"><br><br>
-
-        <label for="focus-duration">Duration (minutes):</label><br>
-        <input type="number" id="focus-duration" min="1" required style="width: 100%;"><br><br>
-
-        <button type="submit" id="start-focus-btn">Start Focus</button>
-        <button type="button" id="stop-focus-btn" style="display:none; margin-left: 10px;">Stop Focus</button>
-      </form>
-      <div id="focus-status" style="margin-top: 10px;"></div>
-    </div>
-
-    <!-- Points & Focus Sprint -->
-    <div style="margin-top: 20px;">
-      <p id="pointsDisplay">Points: 0</p>
-      <button id="startSprintBtn">🎯 Start Focus Sprint</button>
-    </div>
-
-    <!-- Stop Sprint -->
-    <div style="margin-top: 10px;">
-      <button id="stopSprintBtn" style="background-color: #e53935; color: white; display: none;">🛑 Stop Sprint</button>
-    </div>
-
-    <!-- Sprint Timer -->
-    <div id="sprintTimerContainer" style="display:none; margin-top: 15px;">
-      <p id="sprintCountdown">25:00</p>
-      <progress id="sprintProgress" max="1500" value="0" style="width: 80%; height: 20px;"></progress>
+    <div class="toggle-wrapper">
+      <input type="checkbox" id="toggleBlur"/>
+      <label class="toggle-label">Blur YouTube Thumbnails</label>
     </div>
   </div>
 
-  <!-- Your JS logic -->
+  <div class="section">
+    <p id="pointsDisplay">Points: 0</p>
+    <p id="penaltyDisplay">Today's Penalty: 0</p>
+    <p id="netPointsDisplay">Net Points: 0</p>
+    <p id="streakDisplay">🔥Streak: 0 days</p>
+
+    <button id="startSprintBtn">🎯 Start Sprint</button>
+    <button id="stopSprintBtn">🛑 Stop Sprint</button>
+
+    <div id="sprintTimerContainer" style="display:none;margin-top:10px;">
+      <p id="sprintCountdown">25:00</p>
+      <progress id="sprintProgress" max="1500" value="0"></progress>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 style="font-size:16px; margin-bottom:6px; text-align:center;">📉 Distraction Stats</h2>
+    <div id="wastedTimeDisplay">Loading...</div>
+    <button id="resetStatsBtn">Reset Stats</button>
+  </div>
+
+  <a href="stats.html" target="_blank" class="link-button">📊 View Full Stats</a>
   <script src="popup.js"></script>
 </body>
 </html>
