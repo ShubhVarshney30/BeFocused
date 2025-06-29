@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Focus Mode On</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="block-container">
+    <h1>Focus Mode On</h1>
+    <p>You are in Focus Mode. Only the selected site is allowed during this time.<br>
+    All other sites are blocked until the timer ends.</p>
+    <button id="go-to-site">Go to Allowed Site</button>
+    <div id="timer"></div>
+  </div>
+  <script>
+    chrome.storage.local.get(['focusSite', 'focusEndTime'], (data) => {
+      if (data.focusSite) {
+        document.getElementById('go-to-site').onclick = function() {
+          window.location.href = data.focusSite;
+        };
+      }
+      function updateTimer() {
+        if (data.focusEndTime) {
+          const now = Date.now();
+          const msLeft = data.focusEndTime - now;
+          if (msLeft > 0) {
+            const min = Math.floor(msLeft / 60000);
+            const sec = Math.floor((msLeft % 60000) / 1000);
+            document.getElementById('timer').textContent = `Time left: ${min}m ${sec}s`;
+          } else {
+            document.getElementById('timer').textContent = 'Focus time ended. You may close this tab.';
+          }
+        }
+      }
+      updateTimer();
+      setInterval(updateTimer, 1000);
+    });
+  </script>
+</body>
+</html> 

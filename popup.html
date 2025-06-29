@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tab Monitor</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    /* Optional: fallback styling if popup.css fails */
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      width: 300px;
+    }
+    .container {
+      text-align: center;
+    }
+    .counter-number {
+      font-size: 28px;
+      font-weight: bold;
+    }
+    .status-message.warning {
+      color: red;
+    }
+    .toggle-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 10px 0;
+    }
+    .toggle-label {
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tab Monitor</h1>
+
+    <!-- Tab Switch Counter -->
+    <div class="counter-box">
+      <p class="counter-text">Tabs switched in last 20 min:</p>
+      <p id="tabCount" class="counter-number">0</p>
+      <p id="statusMessage" class="status-message normal">You're staying focused!</p>
+    </div>
+
+    <!-- Alert Toggles -->
+    <div class="toggle-section">
+      <label class="switch">
+        <input type="checkbox" id="toggleAlert" checked />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Enable Alerts</span>
+    </div>
+
+    <div class="toggle-section">
+      <label class="switch">
+        <input type="checkbox" id="toggleWarp" checked />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Enable Time-Warp UI</span>
+    </div>
+
+    <!-- Focus Stats Link -->
+    <div style="margin-top: 20px;">
+      <a href="stats.html" target="_blank" style="text-decoration: none; color: #007BFF;">
+        📊 View Focus Stats
+      </a>
+    </div>
+
+    <!-- Focus Mode -->
+    <div id="focus-mode-section" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <h3>Focus Mode</h3>
+      <form id="focus-form">
+        <label for="focus-url">Website URL:</label><br>
+        <input type="url" id="focus-url" placeholder="https://example.com" required style="width: 100%;"><br><br>
+
+        <label for="focus-duration">Duration (minutes):</label><br>
+        <input type="number" id="focus-duration" min="1" required style="width: 100%;"><br><br>
+
+        <button type="submit" id="start-focus-btn">Start Focus</button>
+        <button type="button" id="stop-focus-btn" style="display:none; margin-left: 10px;">Stop Focus</button>
+      </form>
+      <div id="focus-status" style="margin-top: 10px;"></div>
+    </div>
+
+    <!-- Points & Focus Sprint -->
+    <div style="margin-top: 20px;">
+      <p id="pointsDisplay">Points: 0</p>
+      <button id="startSprintBtn">🎯 Start Focus Sprint</button>
+    </div>
+
+    <!-- Stop Sprint -->
+    <div style="margin-top: 10px;">
+      <button id="stopSprintBtn" style="background-color: #e53935; color: white; display: none;">🛑 Stop Sprint</button>
+    </div>
+
+    <!-- Sprint Timer -->
+    <div id="sprintTimerContainer" style="display:none; margin-top: 15px;">
+      <p id="sprintCountdown">25:00</p>
+      <progress id="sprintProgress" max="1500" value="0" style="width: 80%; height: 20px;"></progress>
+    </div>
+  </div>
+
+  <!-- Your JS logic -->
+  <script src="popup.js"></script>
+</body>
+</html>

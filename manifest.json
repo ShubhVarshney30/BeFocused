@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "Winners",
+  "version": "1.0",
+  "description": "Counts how many times you switch tabs and helps maintain focus.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "notifications",
+    "alarms",
+    "windows",
+    "activeTab",
+    "idle",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["timeWarp.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.instagram.com/*",
+        "*://*.facebook.com/*",
+        "*://*.netflix.com/*"
+      ],
+      "js": ["focusSprint.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "stats.html",
+        "stats.js",
+        "chart.min.js",
+        "stats.css",
+        "settings.html",
+        "settings.js",
+        "settings.css",
+        "alert.mp3",
+        "block.html",
+        "style.css",
+        "break.html",
+        "break.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}
