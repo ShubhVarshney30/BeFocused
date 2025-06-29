@@ -150,6 +150,30 @@
       75% { transform: translateX(-5px); }
       100% { transform: translateX(0); }
     }
+    .fm-wrap, .fm-block {
+      box-sizing: border-box;
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .fm-wrap input,
+    .fm-wrap button {
+      width: 100%;
+      margin: 6px 0;
+      padding: 8px;
+    }
+
+    button.secondary {
+      background: #ececec;
+      color: #333;
+    }
+
+    .small {
+      font-size: 0.85rem;
+      opacity: 0.75;
+    }
+
   </style>
 </head>
 <body>
@@ -186,6 +210,20 @@
 
     <button id="startSprintBtn">🎯 Start Sprint</button>
     <button id="stopSprintBtn">🛑 Stop Sprint</button>
+    <div class="fm-wrap" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <h2>🎯 Focus Mode</h2>
+
+      <label>Allowed domain or URL</label>
+      <input id="fm-site" type="text" placeholder="example.com or https://docs.example.com">
+    
+      <label>Duration (minutes)</label>
+      <input id="fm-minutes" type="number" min="1" placeholder="25">
+    
+      <button id="fm-start">Start</button>
+      <button id="fm-stop" class="secondary">Stop / Reset</button>
+    
+      <p id="fm-status" class="small"></p>
+    </div>
 
     <div id="sprintTimerContainer" style="display:none;margin-top:10px;">
       <p id="sprintCountdown">25:00</p>

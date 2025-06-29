@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Winners",
+  "name": "Winners1",
   "version": "1.0",
   "description": "Counts how many times you switch tabs and helps maintain focus.",
   "permissions": [
@@ -26,6 +26,11 @@
     "48": "icon.png"
   },
   "content_scripts": [
+     {
+       "matches": ["<all_urls>"],
+       "js": ["focusContent.js"],
+       "run_at": "document_start"
+    },
     {
       "matches": ["<all_urls>"],
       "js": ["timeWarp.js"],
@@ -50,6 +55,8 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "focusblock.html", 
+        "focustyle.css",
         "stats.html",
         "stats.js",
         "chart.min.js",
