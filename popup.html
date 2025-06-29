@@ -150,14 +150,14 @@
       75% { transform: translateX(-5px); }
       100% { transform: translateX(0); }
     }
-    .fm-wrap, .fm-block {
+    /* .fm-wrap, .fm-block {
       box-sizing: border-box;
       font-family: system-ui, sans-serif;
       padding: 20px;
       text-align: center;
-    }
+    } */
 
-    .fm-wrap input,
+    #fm-site,#fm-minutes,
     .fm-wrap button {
       width: 100%;
       margin: 6px 0;
@@ -177,8 +177,11 @@
   </style>
 </head>
 <body>
+ 
   <h1>🧠 Focus Dashboard</h1>
-  <div class="section">
+  <div class="section minimized">
+    <h1>Tab Switches Count</h1>
+    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
     <p style="text-align:center;">Tab switches in last 20 min:</p>
     <p id="tabCount" class="counter-number">0</p>
     <p id="statusMessage" class="status-message">You're doing great!</p>
@@ -187,14 +190,17 @@
     </p>
   </div>
 
-  <div class="section toggle-section">
+  <!-- <h1></h1> -->
+  <div class="section toggle-section minimized">
+    <h1>Features</h1>
+    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
     <div class="toggle-wrapper">
       <input type="checkbox" id="toggleAlert"/>
-      <label class="toggle-label">Enable Alerts</label>
+      <label class="toggle-label">Tab Switch Alerts</label>
     </div>
     <div class="toggle-wrapper">
       <input type="checkbox" id="toggleWarp"/>
-      <label class="toggle-label">Time‑Warp UI</label>
+      <label class="toggle-label">Interuption while scrolling</label>
     </div>
     <div class="toggle-wrapper">
       <input type="checkbox" id="toggleBlur"/>
@@ -202,15 +208,27 @@
     </div>
   </div>
 
-  <div class="section">
+ 
+  <div class="section minimized">
+    <h1>Focus Sprint</h1>
+    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
     <p id="pointsDisplay">Points: 0</p>
     <p id="penaltyDisplay">Today's Penalty: 0</p>
     <p id="netPointsDisplay">Net Points: 0</p>
-    <p id="streakDisplay">🔥Streak: 0 days</p>
+    <p id="streakDisplay">��Streak: 0 days</p>
 
     <button id="startSprintBtn">🎯 Start Sprint</button>
     <button id="stopSprintBtn">🛑 Stop Sprint</button>
-    <div class="fm-wrap" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+
+    
+
+    <div id="sprintTimerContainer" style="display:none;margin-top:10px;">
+      <p id="sprintCountdown">25:00</p>
+      <progress id="sprintProgress" max="1500" value="0"></progress>
+    </div>
+  </div>
+    <div class="section minimized" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
       <h2>🎯 Focus Mode</h2>
 
       <label>Allowed domain or URL</label>
@@ -225,19 +243,28 @@
       <p id="fm-status" class="small"></p>
     </div>
 
-    <div id="sprintTimerContainer" style="display:none;margin-top:10px;">
-      <p id="sprintCountdown">25:00</p>
-      <progress id="sprintProgress" max="1500" value="0"></progress>
-    </div>
+  <div class="section minimized" id="feed-notify-section" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
+    <h2>⏰ Feed Notify</h2>
+    <label for="feed-minutes">Notify me after (minutes):</label>
+    <input id="feed-minutes" type="number" min="1" placeholder="Enter minutes" style="width: 100%; margin: 6px 0; padding: 8px;">
+    <button id="feed-save-btn">Save</button>
+    <p id="feed-status" class="small"></p>
   </div>
 
-  <div class="section">
+  <div class="section minimized">
+    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
     <h2 style="font-size:16px; margin-bottom:6px; text-align:center;">📉 Distraction Stats</h2>
     <div id="wastedTimeDisplay">Loading...</div>
     <button id="resetStatsBtn">Reset Stats</button>
   </div>
+  <div style="position: absolute; z-index: 100; padding-bottom: 5px;">
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+      <input type="checkbox" id="darkModeToggle" style="accent-color: #222; width: 18px; height: 18px;"> <span style="font-size: 16px;">🌙 Dark Mode</span>
+    </label>
+  </div>
 
-  <a href="stats.html" target="_blank" class="link-button">📊 View Full Stats</a>
+  <!-- <a href="stats.html" target="_blank" class="link-button">📊 View Full Stats</a> -->
   <script src="popup.js"></script>
 </body>
 </html>

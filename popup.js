@@ -5,7 +5,7 @@
    • Tab‑switch counter, alert toggles
    • 25‑minute Focus Sprint timer (Pomodoro‑style)
    • Points, distraction‑time display, reset button
-   • Mini Chart.js doughnut showing today’s focus vs distraction
+   • Mini Chart.js doughnut showing today's focus vs distraction
    • YouTube Thumbnail Blur toggle (NEW ✅)
    ------------------------------------------------------------------ */
 
@@ -100,7 +100,7 @@ function drawMiniChart() {
           legend: { position: 'bottom' },
           title: {
             display: true,
-            text: 'Today’s Focus Ratio',
+            text: 'Todays Focus Ratio',
             font: { size: 14 }
           }
         }
@@ -244,6 +244,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
     drawMiniChart();
   });
+
+  // Feed Notify logic
+  const feedMinutesInput = document.getElementById('feed-minutes');
+  const feedSaveBtn = document.getElementById('feed-save-btn');
+  const feedStatus = document.getElementById('feed-status');
+
+  // Load saved value on popup open
+  chrome.storage.local.get('feedNotifyMinutes', (data) => {
+    if (data.feedNotifyMinutes) {
+      feedMinutesInput.value = data.feedNotifyMinutes;
+    }
+  });
+
+  feedSaveBtn.addEventListener('click', () => {
+    const minutes = parseInt(feedMinutesInput.value, 10);
+    if (!minutes || minutes < 1) {
+      feedStatus.textContent = 'Please enter a valid number of minutes.';
+      feedStatus.style.color = 'red';
+      return;
+    }
+    chrome.storage.local.set({ feedNotifyMinutes: minutes }, () => {
+      feedStatus.textContent = 'Feed Notify interval saved!';
+      feedStatus.style.color = 'green';
+      setTimeout(() => { feedStatus.textContent = ''; }, 2000);
+    });
+  });
+
+  // Dark mode logic
+  const darkToggle = document.getElementById('darkModeToggle');
+  chrome.storage.local.get('darkMode', (data) => {
+    if (data.darkMode) {
+      document.body.classList.add('dark-mode');
+      darkToggle.checked = true;
+    }
+  });
+  darkToggle.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      document.body.classList.add('dark-mode');
+      chrome.storage.local.set({ darkMode: true });
+    } else {
+      document.body.classList.remove('dark-mode');
+      chrome.storage.local.set({ darkMode: false });
+    }
+  });
+
+  // Minimize/maximize logic for sections (default minimized)
+  document.querySelectorAll('.minimize-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      const section = btn.closest('.section, .fm-wrap.section');
+      if (!section) return;
+      section.classList.toggle('minimized');
+      const icon = btn.querySelector('span');
+      if (section.classList.contains('minimized')) {
+        icon.textContent = '+';
+        btn.setAttribute('aria-label', 'Maximize section');
+      } else {
+        icon.textContent = '−';
+        btn.setAttribute('aria-label', 'Minimize section');
+      }
+    });
+  });
 });
 
 
@@ -272,7 +333,7 @@ function extractHostname(input) {
 
 function showStatus(host, end) {
   statusEl.textContent =
-    `Only “${host}” allowed until ${new Date(end).toLocaleTimeString()}.`;
+    `Only "${host}" allowed until ${new Date(end).toLocaleTimeString()}.`;
 }
 
 /* ── load active session (if any) ───────────────────────────── */

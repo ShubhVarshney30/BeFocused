@@ -25,6 +25,47 @@
     padding: 16px;
   }
   
+  body.dark-mode {
+    background: #181a20 !important;
+    color: #f3f4f6 !important;
+  }
+  
+  body.dark-mode .section,
+  body.dark-mode .fm-wrap,
+  body.dark-mode .fm-block {
+    background: #23262f !important;
+    color: #f3f4f6 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+  
+  body.dark-mode h1,
+  body.dark-mode h2,
+  body.dark-mode label,
+  body.dark-mode .toggle-label {
+    color: #e0e6f7 !important;
+  }
+  
+  body.dark-mode button {
+    background: linear-gradient(to right, #23262f, #353945) !important;
+    color: #f3f4f6 !important;
+    border: 1px solid #353945 !important;
+  }
+  
+  body.dark-mode input,
+  body.dark-mode input[type="number"] {
+    background: #23262f !important;
+    color: #f3f4f6 !important;
+    border: 1px solid #353945 !important;
+  }
+  
+  body.dark-mode .link-button {
+    color: #8ab4f8 !important;
+  }
+  
+  body.dark-mode #penaltyDisplay { color: #ff7675 !important; }
+  body.dark-mode #netPointsDisplay { color: #8ab4f8 !important; }
+  body.dark-mode #streakDisplay { color: #00e676 !important; }
+  
   .container {
     display: flex;
     flex-direction: column;
@@ -122,5 +163,39 @@
   
   input:checked + .slider:before {
     transform: translateX(16px);
+  }
+  
+  .minimize-btn {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    background: #ececec;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+  .minimize-btn:hover {
+    background: #d1d5db;
+  }
+  .section, .fm-wrap.section {
+    position: relative;
+  }
+  .section.minimized > *:not(.minimize-btn):not(h1):not(h2),
+  .fm-wrap.section.minimized > *:not(.minimize-btn):not(h1):not(h2) {
+    display: none !important;
+  }
+  .section.minimized, .fm-wrap.section.minimized {
+    min-height: 36px;
+    padding-bottom: 8px;
   }
   

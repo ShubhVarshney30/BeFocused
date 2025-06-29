@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Winners1",
+  "name": "BeFocused",
   "version": "1.0",
   "description": "Counts how many times you switch tabs and helps maintain focus.",
   "permissions": [
@@ -26,6 +26,18 @@
     "48": "icon.png"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "*://www.youtube.com/*",
+      "*://x.com/*",
+      "*://www.instagram.com/*",
+      "*://www.reddit.com/*",
+      "*://www.tiktok.com/*"
+      ],
+      "js": [
+    "intentionalFeed.js"],
+      "run_at": "document_idle"
+    },
      {
        "matches": ["<all_urls>"],
        "js": ["focusContent.js"],
