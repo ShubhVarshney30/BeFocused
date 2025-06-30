@@ -436,17 +436,17 @@
       <p id="motivationStatus">✨ Stay focused and watch yourself rise!</p>
     </div>
 
-    <!-- AI Insights Section -->
-    <div class="section">
-      <h2>🤖 AI Insights</h2>
-      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
-      
-      <div class="ai-insights">
-        <div><strong>Current behavior:</strong> <span id="aiClassification">Analyzing...</span></div>
-        <div id="aiNudge" class="ai-nudge"></div>
-        <div id="aiDetails" class="ai-details"></div>
-      </div>
-    </div>
+<!-- In popup.html, ensure these elements exist with exact IDs -->
+<div class="section">
+  <h2>🤖 AI Insights</h2>
+  <button class="minimize-btn" aria-label="Minimize section">−</button>
+  
+  <div class="ai-insights" id="aiInsightsContainer">
+    <div><strong>Current behavior:</strong> <span id="aiClassification">Analyzing...</span></div>
+    <div id="aiNudge" class="ai-nudge"></div>
+    <div id="aiDetails" class="ai-details"></div>
+  </div>
+</div>
 
     <!-- Focus Sprint Section -->
     <div class="section minimized">

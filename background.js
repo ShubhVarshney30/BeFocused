@@ -1,6 +1,6 @@
-/* Enhanced Tab & Focus Monitor - background.js v4.2 */
+/* Enhanced Tab & Focus Monitor - background.js v5.0 (Gemini) */
+import { getGeminiNudge } from './services/gemini.js';
 import { classifySite } from './services/classifier.js';
-import { getDeepSeekNudge } from './services/deepseek.js'; // Changed from gemini.js
 
 // Constants
 const TIME_WINDOW_MINUTES = 20;
@@ -14,10 +14,9 @@ const DISTRACTION_PENALTY_POINTS = 5;
 const NO_DISTRACTION_REWARD_INTERVAL = 60 * 60 * 1000;
 const NO_DISTRACTION_REWARD_POINTS = 15;
 const NOTIFICATION_COOLDOWN = 1000 * 60 * 5; // 5 minutes
-const NUDGE_COOLDOWN = 1000 * 60 * 10; // 10 minutes between nudges
 const MIN_DISTRACTION_DURATION = 5000; // 5 seconds minimum to record
 
-// State variables
+// Dynamic variables
 let tabSwitchTimestamps = [];
 let sprintTimeout = null;
 let currentDistraction = {
@@ -28,6 +27,7 @@ let currentDistraction = {
 let lastFocusedUrl = null;
 let lastNotificationTime = 0;
 let lastNudgeTime = 0;
+let NUDGE_COOLDOWN = 1000 * 60 * 10; // Start with 10 minutes, adjusts dynamically
 
 // Initialize extension
 chrome.runtime.onInstalled.addListener(initializeStorage);
@@ -57,7 +57,12 @@ function initializeStorage() {
         aiInsights: {
           lastClassification: null,
           lastNudge: null,
-          lastDistractionFlow: null
+          lastDistractionFlow: null,
+          geminiUsage: {
+            count: 0,
+            lastUsed: null,
+            errors: 0
+          }
         }
       };
       chrome.storage.local.set(initialStats);
@@ -136,19 +141,39 @@ async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
   if (isDistraction) {
     classification = 'distraction';
     
-    // Only generate nudge if cooldown has passed
     if (Date.now() - lastNudgeTime > NUDGE_COOLDOWN) {
       try {
-        // Simplified nudge generation with DeepSeek
-        nudge = await getDeepSeekNudge(fromUrl, toUrl);
+        const userContext = await getUserProductivityContext();
+        const fromContext = getDomainContext(fromUrl);
+        
+        nudge = await getGeminiNudge(fromUrl, toUrl, {
+          ...userContext,
+          context: fromContext,
+          timeOfDay: new Date().getHours()
+        });
+        
+        // Update usage stats
+        await chrome.storage.local.set({ 
+          'aiInsights.geminiUsage.count': (userContext.aiInsights?.geminiUsage?.count || 0) + 1,
+          'aiInsights.geminiUsage.lastUsed': Date.now()
+        });
+        
         lastNudgeTime = Date.now();
+        NUDGE_COOLDOWN = Math.max(1000 * 60 * 5, NUDGE_COOLDOWN * 0.9); // Reduce cooldown on success
       } catch (error) {
-        console.error("Nudge generation failed:", error);
+        console.error("Gemini nudge generation failed:", error);
         nudge = generateLocalNudge(fromUrl, toUrl);
+        
+        // Increase cooldown on error
+        NUDGE_COOLDOWN = Math.min(1000 * 60 * 30, NUDGE_COOLDOWN * 1.5);
+        
+        await chrome.storage.local.set({
+          'aiInsights.geminiUsage.errors': (userContext.aiInsights?.geminiUsage?.errors || 0) + 1
+        });
       }
 
       if (Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
-        showNotification('⚠️ Focus Alert', nudge);
+        showEnhancedNotification(nudge, classification);
         lastNotificationTime = Date.now();
       }
     }
@@ -159,13 +184,14 @@ async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
       'aiInsights.lastDistractionFlow': {
         from: fromUrl,
         to: toUrl,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        context: getDomainContext(fromUrl)
       }
     });
   }
 }
 
-// Stats Management (unchanged from original)
+// Stats Management
 async function updateDistractionStats(url, duration) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
@@ -204,6 +230,7 @@ async function updateDistractionStats(url, duration) {
   await chrome.storage.local.set({ distractionStats: stats });
   await applyProductivitySystems(stats);
 }
+
 async function applyProductivitySystems(stats) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
@@ -270,7 +297,6 @@ async function applyProductivitySystems(stats) {
     );
   }
   
-  // Update trend data
   updateTrendStats(stats);
 }
 
@@ -297,28 +323,82 @@ function getDomain(url) {
   }
 }
 
+function getDomainContext(url) {
+  const domain = getDomain(url).toLowerCase();
+  if (domain.includes('docs') || domain.includes('notion')) return 'document';
+  if (domain.includes('github') || domain.includes('gitlab')) return 'coding';
+  if (domain.includes('jira') || domain.includes('trello')) return 'planning';
+  if (domain.includes('mail') || domain.includes('outlook')) return 'email';
+  if (domain.includes('figma') || domain.includes('adobe')) return 'design';
+  return 'work';
+}
+
+async function getUserProductivityContext() {
+  const data = await chrome.storage.local.get([
+    'dailyStreak',
+    'userPoints',
+    'sprintActive',
+    'distractionStats',
+    'aiInsights'
+  ]);
+  
+  return {
+    streak: data.dailyStreak || 0,
+    points: data.userPoints || 0,
+    inSprint: data.sprintActive || false,
+    topDistractions: Object.entries(data.distractionStats || {})
+      .sort((a, b) => b[1].today - a[1].today)
+      .slice(0, 3)
+      .map(([domain]) => domain),
+    aiInsights: data.aiInsights
+  };
+}
+
 function generateLocalNudge(fromUrl, toUrl) {
   const fromDomain = getDomain(fromUrl);
   const toDomain = getDomain(toUrl);
+  const context = getDomainContext(fromUrl);
   
-  const nudges = [
-    `You were focused on ${fromDomain} - want to continue?`,
-    `Quick break? ${fromDomain} is waiting!`,
-    `${toDomain} can wait - you're doing great!`,
-    `Remember your goal on ${fromDomain}`,
-    `Your focus on ${fromDomain} was impressive!`
-  ];
+  const nudges = {
+    document: [
+      `Your document on ${fromDomain} is waiting to be finished`,
+      `You were editing ${fromDomain} - just a few more changes?`
+    ],
+    coding: [
+      `Your code on ${fromDomain} needs your attention`,
+      `Those bugs on ${fromDomain} won't fix themselves`
+    ],
+    email: [
+      `Your inbox on ${fromDomain} can wait a bit longer`,
+      `Those emails aren't going anywhere`
+    ],
+    default: [
+      `You were focused on ${fromDomain} - want to continue?`,
+      `${toDomain} can wait - you're doing great!`
+    ]
+  };
   
-  return nudges[Math.floor(Math.random() * nudges.length)];
+  const contextNudges = nudges[context] || nudges.default;
+  return contextNudges[Math.floor(Math.random() * contextNudges.length)];
 }
 
-function showNotification(title, message) {
+function showEnhancedNotification(nudge, classification) {
+  const icons = {
+    distraction: '⚠️',
+    neutral: '💡',
+    productive: '✅'
+  };
+  
   chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icon.png',
-    title: title,
-    message: message,
-    priority: 2
+    title: `${icons[classification] || '🤖'} Focus Alert`,
+    message: nudge,
+    priority: 2,
+    buttons: [{
+      title: 'Dismiss',
+      iconUrl: 'close.png'
+    }]
   });
 }
 
@@ -416,6 +496,6 @@ function updateTrendStats(currentStats) {
       });
     }
     
-    chrome.storage.local.set({ distractionStatsTrend: trendData.slice(-7) }); // Keep last 7 days
+    chrome.storage.local.set({ distractionStatsTrend: trendData.slice(-7) });
   });
 }

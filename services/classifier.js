@@ -1,5 +1,5 @@
 // services/classifier.js
-import { DEEPSEEK_API_KEY } from '../config.js';
+import { GEMINI_API_KEY } from '../config.js';
 
 const classificationCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours cache
