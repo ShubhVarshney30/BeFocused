@@ -1,4 +1,4 @@
-/* Enhanced Tab & Focus Monitor - background.js v5.0 (Gemini) */
+/* Enhanced Tab & Focus Monitor - background.js v5.1 (Improved Penalty System) */
 import { getGeminiNudge } from './services/gemini.js';
 import { classifySite } from './services/classifier.js';
 
@@ -15,6 +15,7 @@ const NO_DISTRACTION_REWARD_INTERVAL = 60 * 60 * 1000;
 const NO_DISTRACTION_REWARD_POINTS = 15;
 const NOTIFICATION_COOLDOWN = 1000 * 60 * 5; // 5 minutes
 const MIN_DISTRACTION_DURATION = 5000; // 5 seconds minimum to record
+const GRACE_PERIOD = 60 * 1000; // 1 minute grace period for short distractions
 
 // Dynamic variables
 let tabSwitchTimestamps = [];
@@ -49,7 +50,7 @@ function initializeStorage() {
         distractionStats: {},
         lastReset: today,
         totalPenaltyToday: 0,
-        lastPenaltyCheck: 0,
+        lastPenaltyCheck: Date.now(),
         lastRewardTime: Date.now(),
         dailyStreak: 0,
         lastProductiveDay: new Date(Date.now() - 86400000).toDateString(),
@@ -191,7 +192,7 @@ async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
   }
 }
 
-// Stats Management
+// Stats Management - Improved Version
 async function updateDistractionStats(url, duration) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
@@ -228,59 +229,77 @@ async function updateDistractionStats(url, duration) {
   });
 
   await chrome.storage.local.set({ distractionStats: stats });
-  await applyProductivitySystems(stats);
+  await applyProductivitySystems(stats, duration);
 }
 
-async function applyProductivitySystems(stats) {
+// Improved Penalty System
+async function applyProductivitySystems(stats, newDuration) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
     'sprintActive', 'lastPenaltyCheck', 'lastRewardTime',
-    'dailyStreak', 'lastProductiveDay'
+    'dailyStreak', 'lastProductiveDay', 'distractionStats',
+    'totalPenaltyToday', 'userPoints'
   ]);
 
-  const totalMs = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
+  // Check if we need to reset daily stats
+  if (data.lastReset !== today) {
+    await resetDailyStats();
+    return;
+  }
 
-  // Penalty System
-  const lastPenaltyCheck = data.lastPenaltyCheck || 0;
-  const penaltyChunks = Math.floor((totalMs - lastPenaltyCheck) / DISTRACTION_PENALTY_INTERVAL);
+  // Penalty System - Improved
+  const lastPenaltyCheck = data.lastPenaltyCheck || Date.now();
+  const timeSinceLastCheck = Date.now() - lastPenaltyCheck;
   
-  if (!data.sprintActive && penaltyChunks > 0) {
-    const penaltyPoints = penaltyChunks * DISTRACTION_PENALTY_POINTS;
-    const { userPoints = 0 } = await chrome.storage.local.get(['userPoints']);
-    const newPoints = Math.max(0, userPoints - penaltyPoints);
+  // Only apply penalty if the new distraction is significant
+  if (newDuration >= GRACE_PERIOD) {
+    const penaltyChunks = Math.floor(newDuration / DISTRACTION_PENALTY_INTERVAL);
     
-    await chrome.storage.local.set({
-      userPoints: newPoints,
-      totalPenaltyToday: (data.totalPenaltyToday || 0) + penaltyPoints,
-      lastPenaltyCheck: lastPenaltyCheck + penaltyChunks * DISTRACTION_PENALTY_INTERVAL
-    });
+    if (penaltyChunks > 0) {
+      const penaltyPoints = penaltyChunks * DISTRACTION_PENALTY_POINTS;
+      const newPoints = Math.max(0, (data.userPoints || 0) - penaltyPoints);
+      
+      await chrome.storage.local.set({
+        userPoints: newPoints,
+        totalPenaltyToday: (data.totalPenaltyToday || 0) + penaltyPoints,
+        lastPenaltyCheck: Date.now()
+      });
 
-    showNotification(
-      '⛔ Distraction Penalty',
-      `${penaltyPoints} points deducted for ${penaltyChunks * 5} mins distraction!`
-    );
+      if (Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+        showNotification(
+          '⛔ Distraction Penalty',
+          `${penaltyPoints} points deducted for ${Math.round(newDuration/60000)} mins on ${getDomain(currentDistraction.url)}!`
+        );
+        lastNotificationTime = Date.now();
+      }
+    }
   }
   
-  // Reward System
+  // Reward System - Improved
   const now = Date.now();
-  if (now - (data.lastRewardTime || 0) >= NO_DISTRACTION_REWARD_INTERVAL && 
-      totalMs < NO_DISTRACTION_REWARD_INTERVAL) {
-    const { userPoints = 0 } = await chrome.storage.local.get(['userPoints']);
-    const newPoints = userPoints + NO_DISTRACTION_REWARD_POINTS;
+  if (now - (data.lastRewardTime || 0) >= NO_DISTRACTION_REWARD_INTERVAL) {
+    const totalDistractionTime = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
     
-    await chrome.storage.local.set({
-      userPoints: newPoints,
-      lastRewardTime: now
-    });
+    if (totalDistractionTime < (NO_DISTRACTION_REWARD_INTERVAL / 2)) { // Less than 30 mins distraction
+      const rewardPoints = NO_DISTRACTION_REWARD_POINTS;
+      const newPoints = (data.userPoints || 0) + rewardPoints;
+      
+      await chrome.storage.local.set({
+        userPoints: newPoints,
+        lastRewardTime: now
+      });
 
-    showNotification(
-      '🎁 Focus Reward',
-      `+${NO_DISTRACTION_REWARD_POINTS} points for 1 hour distraction-free!`
-    );
+      showNotification(
+        '🎁 Focus Reward',
+        `+${rewardPoints} points for staying focused!`
+      );
+    }
   }
   
-  // Streak System
-  const wasProductive = (!data.sprintActive && totalMs < 10 * 60 * 1000);
+  // Streak System - Improved
+  const totalDistractionToday = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
+  const wasProductive = totalDistractionToday < 10 * 60 * 1000; // Less than 10 mins distraction
+  
   if (wasProductive && data.lastProductiveDay !== today) {
     const yesterday = new Date(Date.now() - 86400000).toDateString();
     const newStreak = (data.lastProductiveDay === yesterday) ? 
@@ -300,7 +319,7 @@ async function applyProductivitySystems(stats) {
   updateTrendStats(stats);
 }
 
-// Helper Functions
+// Helper Functions (unchanged from original)
 function isDistractionSite(url) {
   if (!url) return false;
   try {
@@ -473,6 +492,8 @@ async function resetDailyStats() {
     distractionStats: {},
     totalPenaltyToday: 0,
     lastReset: today,
+    lastPenaltyCheck: Date.now(),
+    lastRewardTime: Date.now(),
     distractionStatsTrend: trendData.slice(-7) // Keep last 7 days
   });
 }
@@ -497,5 +518,15 @@ function updateTrendStats(currentStats) {
     }
     
     chrome.storage.local.set({ distractionStatsTrend: trendData.slice(-7) });
+  });
+}
+
+function showNotification(title, message) {
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icon.png',
+    title: title,
+    message: message,
+    priority: 1
   });
 }

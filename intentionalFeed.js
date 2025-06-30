@@ -1,4 +1,18 @@
-let MINUTES_LIMIT = 10;
+let MINUTES_LIMIT = 10; // fallback default
+
+chrome.storage.local.get(['feedMinutesLimit'], (data) => {
+  if (data.feedMinutesLimit && !isNaN(data.feedMinutesLimit)) {
+    MINUTES_LIMIT = data.feedMinutesLimit;
+  }
+});
+
+// Optional: Listen for live changes too
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.feedMinutesLimit) {
+    MINUTES_LIMIT = changes.feedMinutesLimit.newValue;
+  }
+});
+
 const INJECTION_INTERVAL = 10;
 let scrollCounter = 0;
 let overlayActive = false;
@@ -772,10 +786,13 @@ let fastScrolls = 0;
 
 function startOverlayInterval() {
   setInterval(() => {
-    if (!overlayActive && (Date.now() - startTime) / 60000 >= MINUTES_LIMIT) {
+    const elapsed = (Date.now() - startTime) / 60000;
+    console.log("⏳ Elapsed mins:", elapsed.toFixed(2), "/", MINUTES_LIMIT);
+
+    if (!overlayActive && elapsed >= MINUTES_LIMIT) {
       showMindfulOverlay();
     }
-  }, 30000);
+  }, 5000); // check every 5s
 }
 
 chrome.storage && chrome.storage.local && chrome.storage.local.get('feedNotifyMinutes', (data) => {
