@@ -170,15 +170,15 @@ We welcome contributions! To get started:
 ## 🖼️ UI Previews
 
 ### 🌙 Dark Mode
-![Dark Mode](./assets/dark_mode.jpg)
+![Dark Mode](./Assets/dark_mode.jpg)
 
 ### 📊 Distraction Stats
-![Distraction Stats](./assets/distractionstats.jpg)
+![Distraction Stats](./Assets/distractionstats.jpg)
 
 ### 🛡️ Focus Mode
-![Focus Mode](./assets/Focus_mode.jpg)
+![Focus Mode](./Assets/Focus_mode.jpg)
 
-### 🚀 Launch & Main Dashboard
+### Reminder and Nudges
 ![Main Dashboard](./Assets/LOG.jpg)
 
 ### ❗ Penalty Triggered
