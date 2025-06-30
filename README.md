@@ -165,4 +165,27 @@ We welcome contributions! To get started:
 ---
 
 **Stay focused. Build your best self. 🦖✨**
-# THISISFORTESTING
+---
+
+## 🖼️ UI Previews
+
+### 🌙 Dark Mode
+![Dark Mode](./assets/dark_mode.jpg)
+
+### 📊 Distraction Stats
+![Distraction Stats](./assets/distractionstats.jpg)
+
+### 🛡️ Focus Mode
+![Focus Mode](./assets/Focus_mode.jpg)
+
+### 🚀 Launch & Main Dashboard
+![Main Dashboard](./Assets/LOG.jpg)
+
+### ❗ Penalty Triggered
+![Penalty View](./Assets/penalty.jpg)
+
+### ⚙️ Settings Panel
+![Settings](./Assets/Settings.jpg)
+
+### ⏱️ Time Spent Analytics
+![Time Spent](./Assets/timespent.jpg)

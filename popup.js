@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------
-   Enhanced Tab & Focus Monitor – popup.js v3.4
+   Enhanced Tab & Focus Monitor – popup.js v3.2
    ------------------------------------------------------------------
    Features:
    • Comprehensive distraction statistics with interactive charts
@@ -7,7 +7,7 @@
    • Advanced focus mode with site blocking
    • Points system with rewards/penalties
    • Dark mode and UI customization
-   • Robust AI-powered insights and nudges
+   • AI-powered insights and nudges
    ------------------------------------------------------------------ */
 
 // Constants
@@ -71,7 +71,6 @@ const elements = {
     backFromDomain: document.getElementById('backFromDomainBtn')
   },
   aiInsights: {
-    container: document.getElementById('aiInsightsContainer'),
     classification: document.getElementById('aiClassification'),
     nudge: document.getElementById('aiNudge'),
     details: document.getElementById('aiDetails')
@@ -80,17 +79,12 @@ const elements = {
 
 // Initialize the popup
 document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    initializeUI();
-    setupEventListeners();
-    await loadInitialState();
-    setupFocusMode();
-    setupStorageListeners();
-    startStatsUpdates();
-  } catch (error) {
-    console.error("Popup initialization failed:", error);
-    showTempStatus("Failed to initialize. Please refresh.", 'error');
-  }
+  initializeUI();
+  setupEventListeners();
+  await loadInitialState();
+  setupFocusMode();
+  setupStorageListeners();
+  startStatsUpdates();
 });
 
 // Core Functions
@@ -113,109 +107,77 @@ function initializeCharts() {
 }
 
 async function loadInitialState() {
-  try {
-    // Load all initial data in parallel
-    const [
-      sprintData, 
-      statsData, 
-      settingsData,
-      focusData,
-      aiData,
-      trendData
-    ] = await Promise.all([
-      chrome.storage.local.get(['sprintActive', 'sprintEnd']),
-      chrome.storage.local.get([
-        'tabSwitchCount', 'userPoints', 'totalPenaltyToday', 
-        'dailyStreak', 'distractionStats'
-      ]),
-      chrome.storage.local.get(['alertsEnabled', 'timeWarpEnabled', 'darkMode']),
-      chrome.storage.local.get(['focusHost', 'focusEnd']),
-      chrome.storage.local.get(['lastAIClassification', 'lastAINudge', 'lastDistraction']),
-      chrome.storage.local.get(['distractionStatsTrend'])
-    ]);
+  // Load all initial data in parallel
+  const [
+    sprintData, 
+    statsData, 
+    settingsData,
+    focusData,
+    aiData,
+    trendData
+  ] = await Promise.all([
+    chrome.storage.local.get(['sprintActive', 'sprintEnd']),
+    chrome.storage.local.get([
+      'tabSwitchCount', 'userPoints', 'totalPenaltyToday', 
+      'dailyStreak', 'distractionStats'
+    ]),
+    chrome.storage.local.get(['alertsEnabled', 'timeWarpEnabled', 'darkMode']),
+    chrome.storage.local.get(['focusHost', 'focusEnd']),
+    chrome.storage.local.get(['lastAIClassification', 'lastAINudge', 'lastDistraction']),
+    chrome.storage.local.get(['distractionStatsTrend'])
+  ]);
 
-    // Initialize sprint
-    if (sprintData.sprintActive && sprintData.sprintEnd) {
-      const now = Math.floor(Date.now() / 1000);
-      remainingTime = Math.max(0, sprintData.sprintEnd - now);
-      if (remainingTime > 0) startSprintUI();
-    }
-
-    // Update stats display
-    updateStatsDisplay(statsData);
-    
-    // Update distraction stats with detailed view
-    updateDistractionDisplay(statsData.distractionStats || {});
-    updateTrendDisplay(trendData.distractionStatsTrend || []);
-
-    // Set toggle states
-    elements.toggles.alert.checked = settingsData.alertsEnabled !== false;
-    elements.toggles.warp.checked = settingsData.timeWarpEnabled !== false;
-    if (settingsData.darkMode) {
-      document.body.classList.add('dark-mode');
-      elements.toggles.darkMode.checked = true;
-    }
-
-    // Set focus mode if active
-    if (focusData.focusHost && focusData.focusEnd && Date.now() < focusData.focusEnd) {
-      showFocusStatus(focusData.focusHost, focusData.focusEnd);
-      focusModeActive = true;
-    }
-
-    // Set AI insights
-    updateAIInsightsDisplay(aiData);
-  } catch (error) {
-    console.error("Failed to load initial state:", error);
-    showTempStatus("Error loading data. Please refresh.", 'error');
+  // Initialize sprint
+  if (sprintData.sprintActive && sprintData.sprintEnd) {
+    const now = Math.floor(Date.now() / 1000);
+    remainingTime = Math.max(0, sprintData.sprintEnd - now);
+    if (remainingTime > 0) startSprintUI();
   }
-}
 
-function updateAIInsightsDisplay(aiData) {
-  try {
-    if (!aiData) {
-      elements.aiInsights.container.style.display = 'none';
-      return;
-    }
+  // Update stats display
+  updateStatsDisplay(statsData);
+  
+  // Update distraction stats with detailed view
+  updateDistractionDisplay(statsData.distractionStats || {});
+  updateTrendDisplay(trendData.distractionStatsTrend || []);
 
-    elements.aiInsights.container.style.display = 'block';
+  // Set toggle states
+  elements.toggles.alert.checked = settingsData.alertsEnabled !== false;
+  elements.toggles.warp.checked = settingsData.timeWarpEnabled !== false;
+  if (settingsData.darkMode) {
+    document.body.classList.add('dark-mode');
+    elements.toggles.darkMode.checked = true;
+  }
+
+  // Set focus mode if active
+  if (focusData.focusHost && focusData.focusEnd && Date.now() < focusData.focusEnd) {
+    showFocusStatus(focusData.focusHost, focusData.focusEnd);
+    focusModeActive = true;
+  }
+
+  // Set AI insights
+  if (aiData.lastAIClassification) {
+    elements.aiInsights.classification.textContent = aiData.lastAIClassification;
+  }
+  
+  if (aiData.lastAINudge) {
+    elements.aiInsights.nudge.textContent = aiData.lastAINudge;
     
-    if (aiData.lastAIClassification) {
-      elements.aiInsights.classification.textContent = aiData.lastAIClassification;
-      elements.aiInsights.classification.className = `ai-label ${aiData.lastAIClassification.toLowerCase()}`;
-    } else {
-      elements.aiInsights.classification.textContent = "No data";
-      elements.aiInsights.classification.className = "ai-label neutral";
+    // Add visual distinction for distraction type
+    if (aiData.lastAIClassification === 'distraction') {
+      elements.aiInsights.nudge.classList.add('distraction-nudge');
     }
-    
-    if (aiData.lastAINudge) {
-      elements.aiInsights.nudge.textContent = aiData.lastAINudge;
-      
-      // Clear all nudge classes first
-      elements.aiInsights.nudge.className = 'ai-nudge';
-      
-      // Add appropriate class based on classification
-      const nudgeType = aiData.lastAIClassification?.toLowerCase() || 'neutral';
-      elements.aiInsights.nudge.classList.add(`${nudgeType}-nudge`);
-    } else {
-      elements.aiInsights.nudge.textContent = "No nudge available";
-      elements.aiInsights.nudge.className = "ai-nudge neutral-nudge";
-    }
+  }
 
-    if (aiData.lastDistraction) {
-      elements.aiInsights.details.innerHTML = `
-        <div class="distraction-flow">
-          <span class="from">${extractRootDomain(aiData.lastDistraction.from)}</span>
-          <span class="arrow">→</span>
-          <span class="to">${extractRootDomain(aiData.lastDistraction.to)}</span>
-          <span class="time">${new Date(aiData.lastDistraction.timestamp).toLocaleTimeString()}</span>
-        </div>
-      `;
-    } else {
-      elements.aiInsights.details.innerHTML = '<div class="no-data">No recent distractions</div>';
-    }
-  } catch (error) {
-    console.error("Error updating AI insights:", error);
-    elements.aiInsights.container.innerHTML = '<div class="error">Failed to load insights</div>';
+  if (aiData.lastDistraction) {
+    elements.aiInsights.details.innerHTML = `
+      <div class="distraction-flow">
+        <span class="from">${extractRootDomain(aiData.lastDistraction.from)}</span>
+        <span class="arrow">→</span>
+        <span class="to">${extractRootDomain(aiData.lastDistraction.to)}</span>
+        <span class="time">${new Date(aiData.lastDistraction.timestamp).toLocaleTimeString()}</span>
+      </div>
+    `;
   }
 }
 
@@ -511,7 +473,7 @@ function startSprintUI() {
       chrome.storage.local.get(['userPoints'], (data) => {
         const newPoints = (data.userPoints || 0) + 10;
         chrome.storage.local.set({ userPoints: newPoints });
-        showTempStatus('+10 points for completing your sprint!', 'success');
+        showTempStatus('+20 points for completing your sprint!', 'success');
       });
     }
   }, 1000);
@@ -825,53 +787,65 @@ function setupStorageListeners() {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
 
-    try {
-      // Update distraction stats
-      if (changes.distractionStats) {
-        updateDistractionDisplay(changes.distractionStats.newValue || {});
-      }
+    // Update distraction stats
+    if (changes.distractionStats) {
+      updateDistractionDisplay(changes.distractionStats.newValue || {});
+    }
 
-      // Update points display
-      if (changes.userPoints || changes.totalPenaltyToday) {
-        chrome.storage.local.get(['userPoints', 'totalPenaltyToday'], (data) => {
-          elements.stats.points.textContent = data.userPoints || 0;
-          elements.stats.penalty.textContent = data.totalPenaltyToday || 0;
-          elements.stats.netPoints.textContent = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
-        });
-      }
+    // Update points display
+    if (changes.userPoints || changes.totalPenaltyToday) {
+      chrome.storage.local.get(['userPoints', 'totalPenaltyToday'], (data) => {
+        elements.stats.points.textContent = data.userPoints || 0;
+        elements.stats.penalty.textContent = data.totalPenaltyToday || 0;
+        elements.stats.netPoints.textContent = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
+      });
+    }
 
-      // Update streak
-      if (changes.dailyStreak) {
-        chrome.storage.local.get(['userPoints', 'totalPenaltyToday', 'dailyStreak'], (data) => {
-          const netPoints = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
-          updateMotivationMessage(netPoints, data.dailyStreak || 0);
-        });
-      }
+    // Update streak
+    if (changes.dailyStreak) {
+      chrome.storage.local.get(['userPoints', 'totalPenaltyToday', 'dailyStreak'], (data) => {
+        const netPoints = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
+        updateMotivationMessage(netPoints, data.dailyStreak || 0);
+      });
+    }
 
-      // Update tab switch count
-      if (changes.tabSwitchCount) {
-        elements.stats.tabCount.textContent = changes.tabSwitchCount.newValue || 0;
-        elements.stats.statusMessage.textContent = 
-          changes.tabSwitchCount.newValue > 10 ? '⚠️ You switched too much!' : "You're doing great!";
-      }
+    // Update tab switch count
+    if (changes.tabSwitchCount) {
+      elements.stats.tabCount.textContent = changes.tabSwitchCount.newValue || 0;
+      elements.stats.statusMessage.textContent = 
+        changes.tabSwitchCount.newValue > 10 ? '⚠️ You switched too much!' : "You're doing great!";
+    }
 
-      // Enhanced AI insights handling
-      if (changes.lastAIClassification || changes.lastAINudge || changes.lastDistraction) {
-        chrome.storage.local.get([
-          'lastAIClassification', 
-          'lastAINudge', 
-          'lastDistraction'
-        ], (aiData) => {
-          updateAIInsightsDisplay(aiData);
-        });
+    // Update AI insights
+    if (changes.lastAIClassification) {
+      elements.aiInsights.classification.textContent = changes.lastAIClassification.newValue;
+    }
+    
+    if (changes.lastAINudge) {
+      elements.aiInsights.nudge.textContent = changes.lastAINudge.newValue;
+      
+      if (changes.lastAIClassification?.newValue === 'distraction') {
+        elements.aiInsights.nudge.classList.add('distraction-nudge');
+      } else {
+        elements.aiInsights.nudge.classList.remove('distraction-nudge');
       }
+    }
 
-      // Update trend data
-      if (changes.distractionStatsTrend) {
-        updateTrendDisplay(changes.distractionStatsTrend.newValue || []);
-      }
-    } catch (error) {
-      console.error("Error in storage listener:", error);
+    if (changes.lastDistraction) {
+      const data = changes.lastDistraction.newValue;
+      elements.aiInsights.details.innerHTML = `
+        <div class="distraction-flow">
+          <span class="from">${extractRootDomain(data.from)}</span>
+          <span class="arrow">→</span>
+          <span class="to">${extractRootDomain(data.to)}</span>
+          <span class="time">${new Date(data.timestamp).toLocaleTimeString()}</span>
+        </div>
+      `;
+    }
+
+    // Update trend data
+    if (changes.distractionStatsTrend) {
+      updateTrendDisplay(changes.distractionStatsTrend.newValue || []);
     }
   });
 }
@@ -881,5 +855,3 @@ window.addEventListener('unload', () => {
   if (sprintIntervalId) clearInterval(sprintIntervalId);
   if (statsUpdateInterval) clearInterval(statsUpdateInterval);
 });
-
-// End of file

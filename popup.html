@@ -246,13 +246,12 @@
       color: var(--text);
     }
 
-    /* Enhanced AI Insights Styles */
+    /* AI Insights Styles */
     .ai-insights {
       background: rgba(255, 245, 230, 0.3);
       border-radius: 8px;
       padding: 12px;
       margin-top: 15px;
-      transition: all 0.3s ease;
     }
 
     .ai-nudge {
@@ -261,29 +260,37 @@
       padding: 8px;
       border-radius: 4px;
       background: rgba(255, 255, 255, 0.7);
-      transition: all 0.3s ease;
     }
 
     .distraction-nudge {
-      background: rgba(255, 235, 238, 0.7) !important;
-      border-left: 3px solid var(--danger);
+      color: #d32f2f;
       font-weight: 500;
-      color: var(--danger);
     }
 
-    .analyzing-spinner {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border: 2px solid rgba(0, 114, 255, 0.3);
-      border-radius: 50%;
-      border-top-color: var(--primary);
-      animation: spin 1s ease-in-out infinite;
-      margin-right: 8px;
+    .distraction-flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 13px;
     }
 
-    .pulse {
-      animation: pulse 1.5s infinite;
+    .distraction-flow .from {
+      color: #4CAF50;
+    }
+
+    .distraction-flow .to {
+      color: #F44336;
+    }
+
+    .distraction-flow .arrow {
+      opacity: 0.6;
+    }
+
+    .distraction-flow .time {
+      margin-left: auto;
+      opacity: 0.7;
+      font-size: 11px;
     }
 
     .dark-mode-toggle {
@@ -312,10 +319,6 @@
       50% { transform: translateX(4px); }
       75% { transform: translateX(-4px); }
       100% { transform: translateX(0); }
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
     }
 
     .warning-animate {
@@ -433,17 +436,18 @@
       <p id="motivationStatus">✨ Stay focused and watch yourself rise!</p>
     </div>
 
-    <!-- Enhanced AI Insights Section -->
-   <div class="section">
+<!-- In popup.html, ensure these elements exist with exact IDs -->
+<div class="section">
   <h2>🤖 AI Insights</h2>
   <button class="minimize-btn" aria-label="Minimize section">−</button>
   
   <div class="ai-insights" id="aiInsightsContainer">
-    <div><strong>Current behavior:</strong> <span id="aiClassification"><span class="analyzing-spinner"></span>Analyzing...</span></div>
-    <div id="aiNudge" class="ai-nudge pulse">Gathering data about your browsing patterns...</div>
-    <div id="aiDetails" class="ai-details" style="font-size: 13px; margin-top: 8px;"></div>
+    <div><strong>Current behavior:</strong> <span id="aiClassification">Analyzing...</span></div>
+    <div id="aiNudge" class="ai-nudge"></div>
+    <div id="aiDetails" class="ai-details"></div>
   </div>
 </div>
+
     <!-- Focus Sprint Section -->
     <div class="section minimized">
       <h2>Focus Sprint</h2>

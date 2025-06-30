@@ -1,8 +1,10 @@
-/* Enhanced Tab & Focus Monitor - background.js v5.1 (Improved Penalty System) */
+/* Enhanced Tab & Focus Monitor - background.js v6.1 */
 import { getGeminiNudge } from './services/gemini.js';
 import { classifySite } from './services/classifier.js';
 
-// Constants
+// ======================
+// CONSTANTS
+// ======================
 const TIME_WINDOW_MINUTES = 20;
 const MAX_TIME = TIME_WINDOW_MINUTES * 60 * 1000;
 const THRESHOLD = 10;
@@ -10,38 +12,53 @@ const POINTS_KEY = 'userPoints';
 const FOCUS_SPRINT_DURATION = 25 * 60 * 1000;
 const POINTS_PER_SPRINT = 10;
 const DISTRACTION_PENALTY_INTERVAL = 5 * 60 * 1000;
-const DISTRACTION_PENALTY_POINTS = 5;
+const BASE_PENALTY_POINTS = 5;
 const NO_DISTRACTION_REWARD_INTERVAL = 60 * 60 * 1000;
 const NO_DISTRACTION_REWARD_POINTS = 15;
-const NOTIFICATION_COOLDOWN = 1000 * 60 * 5; // 5 minutes
-const MIN_DISTRACTION_DURATION = 5000; // 5 seconds minimum to record
-const GRACE_PERIOD = 60 * 1000; // 1 minute grace period for short distractions
+const NOTIFICATION_COOLDOWN = 1000 * 60 * 5;
+const MIN_DISTRACTION_DURATION = 5000;
+const ANALYSIS_TIMEOUT = 3000;
+const MAX_LOG_ENTRIES = 200;
+const MAX_TAB_SWITCHES = 100;
+const UTC_TODAY = () => new Date().toISOString().split('T')[0];
 
-// Dynamic variables
-let tabSwitchTimestamps = [];
-let sprintTimeout = null;
-let currentDistraction = {
-  url: null,
-  domain: null,
-  startTime: null
+// ======================
+// STATE MANAGEMENT
+// ======================
+let state = {
+  tabSwitchTimestamps: [],
+  sprintTimeout: null,
+  currentDistraction: {
+    url: null,
+    domain: null,
+    startTime: null
+  },
+  lastFocusedUrl: null,
+  lastNotificationTime: 0,
+  lastNudgeTime: 0,
+  nudgeCooldown: 1000 * 60 * 10,
+  isProcessingNudge: false,
+  isProcessingStats: false,
+  injectedTabs: new Set() // Track injected tabs to avoid duplicate injections
 };
-let lastFocusedUrl = null;
-let lastNotificationTime = 0;
-let lastNudgeTime = 0;
-let NUDGE_COOLDOWN = 1000 * 60 * 10; // Start with 10 minutes, adjusts dynamically
 
-// Initialize extension
-chrome.runtime.onInstalled.addListener(initializeStorage);
-chrome.runtime.onStartup.addListener(initializeStorage);
+// ======================
+// INITIALIZATION
+// ======================
+chrome.runtime.onInstalled.addListener(initialize);
+chrome.runtime.onStartup.addListener(initialize);
 chrome.tabs.onActivated.addListener(handleTabSwitch);
 chrome.tabs.onUpdated.addListener(handleTabUpdate);
+chrome.storage.onChanged.addListener(handleStorageChange);
+chrome.alarms.create('cleanup', { periodInMinutes: 60 });
 
-// Core Functions
-function initializeStorage() {
-  const today = new Date().toDateString();
-  chrome.storage.local.get(['lastReset'], (data) => {
-    if (data.lastReset !== today) {
-      const initialStats = {
+async function initialize() {
+  try {
+    const today = UTC_TODAY();
+    const { lastReset } = await storageGet('lastReset');
+    
+    if (lastReset !== today) {
+      await storageSet({
         tabSwitchCount: 0,
         alertsEnabled: true,
         timeWarpEnabled: true,
@@ -50,10 +67,10 @@ function initializeStorage() {
         distractionStats: {},
         lastReset: today,
         totalPenaltyToday: 0,
-        lastPenaltyCheck: Date.now(),
+        lastPenaltyCheck: 0,
         lastRewardTime: Date.now(),
         dailyStreak: 0,
-        lastProductiveDay: new Date(Date.now() - 86400000).toDateString(),
+        lastProductiveDay: new Date(Date.now() - 86400000).toISOString().split('T')[0],
         distractionStatsTrend: [],
         aiInsights: {
           lastClassification: null,
@@ -64,47 +81,112 @@ function initializeStorage() {
             lastUsed: null,
             errors: 0
           }
-        }
-      };
-      chrome.storage.local.set(initialStats);
+        },
+        eventLogs: []
+      });
+      logEvent('Storage initialized', { newDay: true });
     }
+
+    // Inject content scripts on all eligible tabs
+    injectContentScripts();
+  } catch (error) {
+    console.error("Initialization failed:", error);
+    logEvent('InitError', { error: error.message });
+  }
+}
+
+// ======================
+// CONTENT SCRIPT MANAGEMENT
+// ======================
+function injectContentScripts() {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(tab => {
+      if (shouldInjectContentScript(tab)) {
+        injectContentScript(tab.id);
+      }
+    });
   });
 }
 
-// Tab Event Handlers
+function shouldInjectContentScript(tab) {
+  return (
+    tab.url && 
+    (tab.url.startsWith('http://') || tab.url.startsWith('https://')) &&
+    !state.injectedTabs.has(tab.id)
+  );
+}
+
+async function injectContentScript(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['contentScripts/floatingButton.js']
+    });
+    state.injectedTabs.add(tabId);
+    logEvent('ContentScriptInjected', { tabId });
+  } catch (error) {
+    console.error('Content script injection failed:', error);
+    logEvent('ContentScriptInjectionError', {
+      tabId,
+      error: error.message
+    });
+  }
+}
+
+// ======================
+// TAB EVENT HANDLERS
+// ======================
 async function handleTabSwitch(activeInfo) {
   const now = Date.now();
   
-  // Update tab switch timestamps
-  tabSwitchTimestamps = tabSwitchTimestamps.filter(ts => now - ts < MAX_TIME);
-  tabSwitchTimestamps.push(now);
-  const newCount = tabSwitchTimestamps.length;
-  
-  await chrome.storage.local.set({ tabSwitchCount: newCount });
-  if (newCount > THRESHOLD) handleExcessiveTabSwitching(newCount);
-
   try {
-    const tab = await chrome.tabs.get(activeInfo.tabId);
-    const toUrl = tab?.url || '';
-    const toTitle = tab?.title || '';
-
-    if (lastFocusedUrl && toUrl && toUrl !== lastFocusedUrl) {
-      await handlePotentialDistraction(lastFocusedUrl, toUrl, toTitle);
+    // Update tab switch tracking
+    state.tabSwitchTimestamps = state.tabSwitchTimestamps
+      .slice(-MAX_TAB_SWITCHES)
+      .filter(ts => now - ts < MAX_TIME);
+    state.tabSwitchTimestamps.push(now);
+    
+    await storageSet({ 
+      tabSwitchCount: state.tabSwitchTimestamps.length 
+    });
+    
+    if (state.tabSwitchTimestamps.length > THRESHOLD) {
+      handleExcessiveTabSwitching(state.tabSwitchTimestamps.length);
     }
 
-    lastFocusedUrl = toUrl;
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    const toUrl = tab?.url || '';
+    
+    if (state.lastFocusedUrl && toUrl && toUrl !== state.lastFocusedUrl) {
+      await handlePotentialDistraction(state.lastFocusedUrl, toUrl, tab?.title || '');
+    }
+
+    // Inject content script if needed
+    if (shouldInjectContentScript(tab)) {
+      injectContentScript(tab.id);
+    }
+
+    state.lastFocusedUrl = toUrl;
   } catch (err) {
-    console.error("Tab processing error:", err);
+    console.error("Tab switch error:", err);
+    logEvent('TabSwitchError', { error: err.message });
   }
 }
 
 function handleTabUpdate(tabId, changeInfo, tab) {
   if (changeInfo.status === 'complete' && tab.active) {
     checkCurrentDistraction();
+    
+    // Inject content script when a tab finishes loading
+    if (shouldInjectContentScript(tab)) {
+      injectContentScript(tab.id);
+    }
   }
 }
 
-// Distraction System
+// ======================
+// DISTRACTION SYSTEM
+// ======================
 function checkCurrentDistraction() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (!tabs[0]?.url) return;
@@ -114,198 +196,196 @@ function checkCurrentDistraction() {
     const domain = getDomain(url);
 
     if (isDistracting) {
-      if (!currentDistraction.url || currentDistraction.url !== url) {
-        if (currentDistraction.url) recordDistractionTime();
-        currentDistraction = { url, domain, startTime: Date.now() };
+      if (!state.currentDistraction.url || state.currentDistraction.url !== url) {
+        if (state.currentDistraction.url) recordDistractionTime();
+        state.currentDistraction = { url, domain, startTime: Date.now() };
       }
-    } else if (currentDistraction.url) {
+    } else if (state.currentDistraction.url) {
       recordDistractionTime();
-      currentDistraction = { url: null, domain: null, startTime: null };
+      state.currentDistraction = { url: null, domain: null, startTime: null };
     }
   });
 }
 
-function recordDistractionTime() {
-  if (!currentDistraction.url || !currentDistraction.startTime) return;
+async function recordDistractionTime() {
+  if (!state.currentDistraction.url || !state.currentDistraction.startTime) return;
 
-  const duration = Date.now() - currentDistraction.startTime;
+  const duration = Date.now() - state.currentDistraction.startTime;
   if (duration >= MIN_DISTRACTION_DURATION) {
-    updateDistractionStats(currentDistraction.url, duration);
+    try {
+      await updateDistractionStats(state.currentDistraction.url, duration);
+    } catch (error) {
+      console.error("Distraction recording failed:", error);
+      logEvent('DistractionRecordError', { 
+        url: state.currentDistraction.url,
+        duration,
+        error: error.message 
+      });
+    }
   }
 }
 
 async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
+  if (state.isProcessingNudge) return;
+  state.isProcessingNudge = true;
+
   const isDistraction = isDistractionSite(toUrl);
   let classification = 'neutral';
   let nudge = '';
   
-  if (isDistraction) {
-    classification = 'distraction';
-    
-    if (Date.now() - lastNudgeTime > NUDGE_COOLDOWN) {
+  if (isDistraction && Date.now() - state.lastNudgeTime > state.nudgeCooldown) {
+    try {
+      const [userContext, fromContext] = await Promise.all([
+        safeGetContext(),
+        getDomainContext(fromUrl)
+      ]);
+
       try {
-        const userContext = await getUserProductivityContext();
-        const fromContext = getDomainContext(fromUrl);
+        nudge = await generateNudge(fromUrl, toUrl, userContext, fromContext);
+        classification = 'distraction';
+        state.lastNudgeTime = Date.now();
+        state.nudgeCooldown = Math.max(1000 * 60 * 5, state.nudgeCooldown * 0.9);
         
-        nudge = await getGeminiNudge(fromUrl, toUrl, {
-          ...userContext,
-          context: fromContext,
-          timeOfDay: new Date().getHours()
+        await updateGeminiUsage(true);
+        logEvent('NudgeGenerated', {
+          from: getDomain(fromUrl),
+          to: getDomain(toUrl),
+          source: 'gemini'
         });
-        
-        // Update usage stats
-        await chrome.storage.local.set({ 
-          'aiInsights.geminiUsage.count': (userContext.aiInsights?.geminiUsage?.count || 0) + 1,
-          'aiInsights.geminiUsage.lastUsed': Date.now()
-        });
-        
-        lastNudgeTime = Date.now();
-        NUDGE_COOLDOWN = Math.max(1000 * 60 * 5, NUDGE_COOLDOWN * 0.9); // Reduce cooldown on success
-      } catch (error) {
-        console.error("Gemini nudge generation failed:", error);
+      } catch (aiError) {
         nudge = generateLocalNudge(fromUrl, toUrl);
+        state.nudgeCooldown = Math.min(1000 * 60 * 30, state.nudgeCooldown * 1.5);
         
-        // Increase cooldown on error
-        NUDGE_COOLDOWN = Math.min(1000 * 60 * 30, NUDGE_COOLDOWN * 1.5);
-        
-        await chrome.storage.local.set({
-          'aiInsights.geminiUsage.errors': (userContext.aiInsights?.geminiUsage?.errors || 0) + 1
+        await updateGeminiUsage(false);
+        logEvent('NudgeFallback', {
+          from: getDomain(fromUrl),
+          to: getDomain(toUrl),
+          error: aiError.message
         });
       }
 
-      if (Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+      if (Date.now() - state.lastNotificationTime > NOTIFICATION_COOLDOWN) {
         showEnhancedNotification(nudge, classification);
-        lastNotificationTime = Date.now();
+        state.lastNotificationTime = Date.now();
       }
-    }
 
-    await chrome.storage.local.set({ 
-      'aiInsights.lastClassification': classification,
-      'aiInsights.lastNudge': nudge,
-      'aiInsights.lastDistractionFlow': {
-        from: fromUrl,
-        to: toUrl,
-        timestamp: Date.now(),
-        context: getDomainContext(fromUrl)
-      }
-    });
+      await storageSet({ 
+        'aiInsights.lastClassification': classification,
+        'aiInsights.lastNudge': nudge,
+        'aiInsights.lastDistractionFlow': {
+          from: fromUrl,
+          to: toUrl,
+          timestamp: Date.now(),
+          context: fromContext
+        }
+      });
+    } catch (error) {
+      console.error("Nudge processing failed:", error);
+      logEvent('NudgeError', { error: error.message });
+    }
   }
+  state.isProcessingNudge = false;
 }
 
-// Stats Management - Improved Version
+// ======================
+// STATS MANAGEMENT
+// ======================
 async function updateDistractionStats(url, duration) {
-  const today = new Date().toDateString();
-  const data = await chrome.storage.local.get([
-    'distractionStats', 'lastReset', 'sprintActive',
-    'lastPenaltyCheck', 'lastRewardTime', 'dailyStreak'
-  ]);
+  if (state.isProcessingStats) return;
+  state.isProcessingStats = true;
 
-  if (data.lastReset !== today) {
-    await resetDailyStats();
-    return;
-  }
+  try {
+    const today = UTC_TODAY();
+    const { distractionStats = {}, lastReset } = await storageGet(['distractionStats', 'lastReset']);
+    
+    if (lastReset !== today) {
+      await resetDailyStats();
+      return;
+    }
 
-  const domain = getDomain(url);
-  const stats = data.distractionStats || {};
-  
-  if (!stats[domain]) {
-    stats[domain] = { 
-      total: 0, 
-      today: 0,
-      count: 0, 
-      lastVisit: 0,
-      sessions: [] 
+    const domain = getDomain(url);
+    const stats = distractionStats[domain] || { 
+      total: 0, today: 0, count: 0, sessions: [] 
     };
-  }
-  
-  stats[domain].total += duration;
-  stats[domain].today += duration;
-  stats[domain].count += 1;
-  stats[domain].lastVisit = Date.now();
-  stats[domain].sessions.push({
-    start: currentDistraction.startTime,
-    duration: duration,
-    end: Date.now()
-  });
 
-  await chrome.storage.local.set({ distractionStats: stats });
-  await applyProductivitySystems(stats, duration);
+    // Atomic update
+    const updatedStats = {
+      ...distractionStats,
+      [domain]: {
+        ...stats,
+        total: stats.total + Math.floor(duration),
+        today: stats.today + Math.floor(duration),
+        count: stats.count + 1,
+        sessions: [
+          ...stats.sessions,
+          { start: state.currentDistraction.startTime, end: Date.now(), duration }
+        ].slice(-50) // Keep last 50 sessions
+      }
+    };
+
+    await storageSet({ distractionStats: updatedStats });
+    await applyProductivitySystems(updatedStats);
+  } finally {
+    state.isProcessingStats = false;
+  }
 }
 
-// Improved Penalty System
-async function applyProductivitySystems(stats, newDuration) {
-  const today = new Date().toDateString();
-  const data = await chrome.storage.local.get([
+async function applyProductivitySystems(stats) {
+  const today = UTC_TODAY();
+  const {
+    sprintActive,
+    lastPenaltyCheck = 0,
+    lastRewardTime = 0,
+    dailyStreak = 0,
+    lastProductiveDay,
+    userPoints = 100
+  } = await storageGet([
     'sprintActive', 'lastPenaltyCheck', 'lastRewardTime',
-    'dailyStreak', 'lastProductiveDay', 'distractionStats',
-    'totalPenaltyToday', 'userPoints'
+    'dailyStreak', 'lastProductiveDay', 'userPoints'
   ]);
 
-  // Check if we need to reset daily stats
-  if (data.lastReset !== today) {
-    await resetDailyStats();
-    return;
-  }
+  const totalMs = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
 
-  // Penalty System - Improved
-  const lastPenaltyCheck = data.lastPenaltyCheck || Date.now();
-  const timeSinceLastCheck = Date.now() - lastPenaltyCheck;
+  // Penalty System
+  const penaltyChunks = Math.floor((totalMs - lastPenaltyCheck) / DISTRACTION_PENALTY_INTERVAL);
   
-  // Only apply penalty if the new distraction is significant
-  if (newDuration >= GRACE_PERIOD) {
-    const penaltyChunks = Math.floor(newDuration / DISTRACTION_PENALTY_INTERVAL);
+  if (!sprintActive && penaltyChunks > 0) {
+    const penaltyPoints = calculatePenalty(penaltyChunks, userPoints);
+    const newPoints = Math.max(0, userPoints - penaltyPoints);
     
-    if (penaltyChunks > 0) {
-      const penaltyPoints = penaltyChunks * DISTRACTION_PENALTY_POINTS;
-      const newPoints = Math.max(0, (data.userPoints || 0) - penaltyPoints);
-      
-      await chrome.storage.local.set({
-        userPoints: newPoints,
-        totalPenaltyToday: (data.totalPenaltyToday || 0) + penaltyPoints,
-        lastPenaltyCheck: Date.now()
-      });
+    await storageSet({
+      userPoints: newPoints,
+      totalPenaltyToday: (await storageGet('totalPenaltyToday')).totalPenaltyToday + penaltyPoints,
+      lastPenaltyCheck: lastPenaltyCheck + penaltyChunks * DISTRACTION_PENALTY_INTERVAL
+    });
 
-      if (Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
-        showNotification(
-          '⛔ Distraction Penalty',
-          `${penaltyPoints} points deducted for ${Math.round(newDuration/60000)} mins on ${getDomain(currentDistraction.url)}!`
-        );
-        lastNotificationTime = Date.now();
-      }
-    }
+    showNotification(
+      '⛔ Distraction Penalty',
+      `${penaltyPoints} points deducted for ${penaltyChunks * 5} mins distraction!`
+    );
   }
   
-  // Reward System - Improved
-  const now = Date.now();
-  if (now - (data.lastRewardTime || 0) >= NO_DISTRACTION_REWARD_INTERVAL) {
-    const totalDistractionTime = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
-    
-    if (totalDistractionTime < (NO_DISTRACTION_REWARD_INTERVAL / 2)) { // Less than 30 mins distraction
-      const rewardPoints = NO_DISTRACTION_REWARD_POINTS;
-      const newPoints = (data.userPoints || 0) + rewardPoints;
-      
-      await chrome.storage.local.set({
-        userPoints: newPoints,
-        lastRewardTime: now
-      });
+  // Reward System
+  if (Date.now() - lastRewardTime >= NO_DISTRACTION_REWARD_INTERVAL && 
+      totalMs < NO_DISTRACTION_REWARD_INTERVAL) {
+    await storageSet({
+      userPoints: userPoints + NO_DISTRACTION_REWARD_POINTS,
+      lastRewardTime: Date.now()
+    });
 
-      showNotification(
-        '🎁 Focus Reward',
-        `+${rewardPoints} points for staying focused!`
-      );
-    }
+    showNotification(
+      '🎁 Focus Reward',
+      `+${NO_DISTRACTION_REWARD_POINTS} points for 1 hour distraction-free!`
+    );
   }
   
-  // Streak System - Improved
-  const totalDistractionToday = Object.values(stats).reduce((sum, site) => sum + (site.today || 0), 0);
-  const wasProductive = totalDistractionToday < 10 * 60 * 1000; // Less than 10 mins distraction
-  
-  if (wasProductive && data.lastProductiveDay !== today) {
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-    const newStreak = (data.lastProductiveDay === yesterday) ? 
-      (data.dailyStreak || 0) + 1 : 1;
+  // Streak System
+  const wasProductive = (!sprintActive && totalMs < 10 * 60 * 1000);
+  if (wasProductive && lastProductiveDay !== today) {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const newStreak = lastProductiveDay === yesterday ? dailyStreak + 1 : 1;
     
-    await chrome.storage.local.set({
+    await storageSet({
       dailyStreak: newStreak,
       lastProductiveDay: today
     });
@@ -319,7 +399,9 @@ async function applyProductivitySystems(stats, newDuration) {
   updateTrendStats(stats);
 }
 
-// Helper Functions (unchanged from original)
+// ======================
+// HELPER FUNCTIONS
+// ======================
 function isDistractionSite(url) {
   if (!url) return false;
   try {
@@ -328,7 +410,7 @@ function isDistractionSite(url) {
       'youtube.com', 'facebook.com', 'instagram.com',
       'twitter.com', 'reddit.com', 'tiktok.com',
       'netflix.com', 'twitch.tv', '9gag.com'
-    ].some(d => domain.includes(d));
+    ].some(d => domain === d); // Exact match only
   } catch {
     return false;
   }
@@ -350,27 +432,6 @@ function getDomainContext(url) {
   if (domain.includes('mail') || domain.includes('outlook')) return 'email';
   if (domain.includes('figma') || domain.includes('adobe')) return 'design';
   return 'work';
-}
-
-async function getUserProductivityContext() {
-  const data = await chrome.storage.local.get([
-    'dailyStreak',
-    'userPoints',
-    'sprintActive',
-    'distractionStats',
-    'aiInsights'
-  ]);
-  
-  return {
-    streak: data.dailyStreak || 0,
-    points: data.userPoints || 0,
-    inSprint: data.sprintActive || false,
-    topDistractions: Object.entries(data.distractionStats || {})
-      .sort((a, b) => b[1].today - a[1].today)
-      .slice(0, 3)
-      .map(([domain]) => domain),
-    aiInsights: data.aiInsights
-  };
 }
 
 function generateLocalNudge(fromUrl, toUrl) {
@@ -397,8 +458,83 @@ function generateLocalNudge(fromUrl, toUrl) {
     ]
   };
   
-  const contextNudges = nudges[context] || nudges.default;
-  return contextNudges[Math.floor(Math.random() * contextNudges.length)];
+  return (nudges[context] || nudges.default)[Math.floor(Math.random() * 2)];
+}
+
+async function safeGetContext() {
+  try {
+    const data = await storageGet([
+      'dailyStreak', 'userPoints', 'sprintActive',
+      'distractionStats', 'aiInsights'
+    ]);
+    
+    return {
+      streak: data.dailyStreak || 0,
+      points: data.userPoints || 0,
+      inSprint: data.sprintActive || false,
+      topDistractions: Object.entries(data.distractionStats || {})
+        .sort((a, b) => b[1].today - a[1].today)
+        .slice(0, 3)
+        .map(([domain]) => domain),
+      aiInsights: data.aiInsights || {}
+    };
+  } catch (error) {
+    console.error("Context fetch failed:", error);
+    return {
+      streak: 0,
+      points: 0,
+      inSprint: false,
+      topDistractions: [],
+      aiInsights: {}
+    };
+  }
+}
+
+async function generateNudge(fromUrl, toUrl, userContext, fromContext) {
+  return Promise.race([
+    getGeminiNudge(fromUrl, toUrl, {
+      ...userContext,
+      context: fromContext,
+      timeOfDay: new Date().getHours()
+    }),
+    timeout(ANALYSIS_TIMEOUT, 'AnalysisTimeout')
+  ]);
+}
+
+async function updateGeminiUsage(success) {
+  const { aiInsights = {} } = await storageGet('aiInsights');
+  const { geminiUsage = {} } = aiInsights;
+  
+  await storageSet({
+    'aiInsights.geminiUsage': {
+      count: (geminiUsage.count || 0) + 1,
+      lastUsed: Date.now(),
+      errors: geminiUsage.errors + (success ? 0 : 1)
+    }
+  });
+}
+
+function calculatePenalty(chunks, currentPoints) {
+  const basePenalty = chunks * BASE_PENALTY_POINTS;
+  const scaledPenalty = Math.floor(basePenalty * (1 + (currentPoints / 500)));
+  return Math.min(scaledPenalty, currentPoints);
+}
+
+// ======================
+// NOTIFICATION SYSTEM
+// ======================
+function showNotification(title, message) {
+  try {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon.png',
+      title: title,
+      message: message,
+      priority: 2
+    });
+  } catch (error) {
+    console.error("Notification failed:", error);
+  }
 }
 
 function showEnhancedNotification(nudge, classification) {
@@ -408,125 +544,164 @@ function showEnhancedNotification(nudge, classification) {
     productive: '✅'
   };
   
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icon.png',
-    title: `${icons[classification] || '🤖'} Focus Alert`,
-    message: nudge,
-    priority: 2,
-    buttons: [{
-      title: 'Dismiss',
-      iconUrl: 'close.png'
-    }]
+  try {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon.png',
+      title: `${icons[classification] || '🤖'} Focus Alert`,
+      message: nudge,
+      priority: 2,
+      buttons: [{
+        title: 'Dismiss',
+        iconUrl: 'close.png'
+      }]
+    });
+  } catch (error) {
+    console.error("Enhanced notification failed:", error);
+  }
+}
+
+// ======================
+// STORAGE UTILITIES
+// ======================
+function storageGet(keys) {
+  return new Promise(resolve => {
+    chrome.storage.local.get(keys, resolve);
   });
 }
 
-// Sprint System
+function storageSet(data) {
+  return new Promise(resolve => {
+    chrome.storage.local.set(data, resolve);
+  });
+}
+
+// ======================
+// SPRINT SYSTEM
+// ======================
 function startFocusSprint() {
   stopFocusSprint();
   
-  sprintTimeout = setTimeout(() => {
-    chrome.storage.local.get([POINTS_KEY], (data) => {
-      const newPoints = (data[POINTS_KEY] || 0) + POINTS_PER_SPRINT;
-      chrome.storage.local.set({
-        userPoints: newPoints,
-        sprintActive: false
-      });
-      
-      showNotification('🎉 Sprint Complete!', `+${POINTS_PER_SPRINT} points earned!`);
-      chrome.runtime.sendMessage({ type: "CONFETTI_BLAST" });
+  state.sprintTimeout = setTimeout(async () => {
+    const { userPoints = 0 } = await storageGet('userPoints');
+    await storageSet({
+      userPoints: userPoints + POINTS_PER_SPRINT,
+      sprintActive: false
     });
+    
+    showNotification('🎉 Sprint Complete!', `+${POINTS_PER_SPRINT} points earned!`);
+    chrome.runtime.sendMessage({ type: "CONFETTI_BLAST" });
   }, FOCUS_SPRINT_DURATION);
 }
 
 function stopFocusSprint() {
-  if (sprintTimeout) {
-    clearTimeout(sprintTimeout);
-    sprintTimeout = null;
+  if (state.sprintTimeout) {
+    clearTimeout(state.sprintTimeout);
+    state.sprintTimeout = null;
   }
 }
 
-// Storage Listener
-chrome.storage.onChanged.addListener((changes, area) => {
+// ======================
+// EVENT HANDLERS
+// ======================
+function handleStorageChange(changes, area) {
   if (area === 'local' && changes.sprintActive) {
     changes.sprintActive.newValue ? startFocusSprint() : stopFocusSprint();
   }
-});
+}
 
-// Cleanup
-chrome.alarms.create('cleanup', { periodInMinutes: 60 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'cleanup') {
-    tabSwitchTimestamps = [];
-    chrome.storage.local.set({ tabSwitchCount: 0 });
-  }
-});
-
-// Helper function for excessive tab switching
 function handleExcessiveTabSwitching(count) {
   chrome.storage.local.get(['alertsEnabled'], (data) => {
-    if (data.alertsEnabled !== false && Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+    if (data.alertsEnabled !== false && Date.now() - state.lastNotificationTime > NOTIFICATION_COOLDOWN) {
       showNotification(
         '🔄 Too Many Tab Switches',
         `You've switched tabs ${count} times in ${TIME_WINDOW_MINUTES} minutes. Try to focus!`
       );
-      lastNotificationTime = Date.now();
+      state.lastNotificationTime = Date.now();
     }
   });
 }
 
-// Helper function to reset daily stats
+// ======================
+// MAINTENANCE FUNCTIONS
+// ======================
 async function resetDailyStats() {
-  const today = new Date().toDateString();
-  const data = await chrome.storage.local.get(['distractionStats', 'userPoints']);
+  const today = UTC_TODAY();
+  const { distractionStats = {}, userPoints = 100 } = await storageGet(['distractionStats', 'userPoints']);
   
-  // Archive yesterday's stats
-  const trendData = data.distractionStatsTrend || [];
+  // Archive yesterday
+  const trendData = (await storageGet('distractionStatsTrend')).distractionStatsTrend || [];
   trendData.push({
-    date: new Date(Date.now() - 86400000).toDateString(),
-    totalTime: Object.values(data.distractionStats || {}).reduce((sum, site) => sum + (site.today || 0), 0)
+    date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    totalTime: Object.values(distractionStats).reduce((sum, site) => sum + (site.today || 0), 0)
   });
-  
-  // Reset for new day
-  await chrome.storage.local.set({
+
+  await storageSet({
     distractionStats: {},
     totalPenaltyToday: 0,
     lastReset: today,
-    lastPenaltyCheck: Date.now(),
-    lastRewardTime: Date.now(),
-    distractionStatsTrend: trendData.slice(-7) // Keep last 7 days
+    distractionStatsTrend: trendData.slice(-7),
+    userPoints: Math.max(50, userPoints) // Never drop below 50
   });
 }
 
-// Helper function to update trend stats
 function updateTrendStats(currentStats) {
-  chrome.storage.local.get(['distractionStatsTrend'], (data) => {
-    const trendData = data.distractionStatsTrend || [];
-    const today = new Date().toDateString();
+  const today = UTC_TODAY();
+  const totalToday = Object.values(currentStats).reduce((sum, site) => sum + (site.today || 0), 0);
+  
+  storageGet('distractionStatsTrend').then(({ distractionStatsTrend = [] }) => {
+    const index = distractionStatsTrend.findIndex(d => d.date === today);
     
-    // Update today's entry if exists, or create new
-    const todayIndex = trendData.findIndex(d => d.date === today);
-    const totalToday = Object.values(currentStats).reduce((sum, site) => sum + (site.today || 0), 0);
+    const updatedTrend = index >= 0
+      ? distractionStatsTrend.map((d, i) => i === index ? { ...d, totalTime: totalToday } : d)
+      : [...distractionStatsTrend, { date: today, totalTime: totalToday }];
     
-    if (todayIndex >= 0) {
-      trendData[todayIndex].totalTime = totalToday;
-    } else {
-      trendData.push({
-        date: today,
-        totalTime: totalToday
-      });
-    }
-    
-    chrome.storage.local.set({ distractionStatsTrend: trendData.slice(-7) });
+    storageSet({ distractionStatsTrend: updatedTrend.slice(-7) });
   });
 }
 
-function showNotification(title, message) {
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icon.png',
-    title: title,
-    message: message,
-    priority: 1
+// ======================
+// UTILITY FUNCTIONS
+// ======================
+function timeout(ms, reason) {
+  return new Promise((_, reject) => { 
+    setTimeout(() => reject(new Error(reason)), ms);
   });
 }
+
+function logEvent(eventName, metadata = {}) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    event: eventName,
+    ...metadata
+  };
+  
+  storageGet('eventLogs').then(({ eventLogs = [] }) => {
+    storageSet({ eventLogs: [...eventLogs, logEntry].slice(-MAX_LOG_ENTRIES) });
+  });
+}
+
+// ======================
+// DEBUG UTILITIES
+// ======================
+if (typeof window !== 'undefined') {
+  window.debug = {
+    simulateTabSwitch: (from, to) => handlePotentialDistraction(
+      `https://${from}`, 
+      `https://${to}`
+    ),
+    forcePenalty: async (minutes) => {
+      await updateDistractionStats(
+        'https://youtube.com', 
+        minutes * 60 * 1000
+      );
+    },
+    resetPoints: () => storageSet({ userPoints: 100 }),
+    startSprint: () => storageSet({ sprintActive: true }),
+    stopSprint: () => storageSet({ sprintActive: false }),
+    injectAllTabs: () => injectContentScripts()
+  };
+}
+
+// Initialize
+logEvent('BackgroundScriptStarted', { version: '6.1' });

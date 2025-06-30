@@ -1,5 +1,4 @@
-// Complete replacement with Gemini implementation
-import { GEMINI_API_KEY } from '../config.js';
+// services/gemini.js (Gemini-Free Version)
 
 const NUDGE_CACHE = new Map();
 const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
@@ -10,42 +9,57 @@ export async function getGeminiNudge(fromUrl, toUrl, userContext = {}) {
     return NUDGE_CACHE.get(cacheKey);
   }
 
-  const prompt = buildGeminiPrompt(fromUrl, toUrl, userContext);
-  
+  const nudge = generateLocalNudge(fromUrl, toUrl, userContext);
+  NUDGE_CACHE.set(cacheKey, nudge);
+  return nudge;
+}
+
+function generateLocalNudge(fromUrl, toUrl, context = {}) {
+  const fromDomain = extractDomain(fromUrl);
+  const toDomain = extractDomain(toUrl);
+  const taskType = context.taskType || detectContext(fromDomain);
+  const streak = context.streak || 0;
+  const tone = context.tonePreference || "supportive";
+
+  const baseNudges = {
+    coding: [
+      `Your code on ${fromDomain} needs your magic 🧠`,
+      `Fixing bugs beats scrolling ${toDomain} 🐞`,
+      `You're in the zone! Stay with ${fromDomain} 💻`
+    ],
+    study: [
+      `Keep learning on ${fromDomain}! 📚`,
+      `Your streak is strong—focus on ${fromDomain} 🔥`,
+      `Ignore ${toDomain}, ace ${fromDomain} instead ✍️`
+    ],
+    writing: [
+      `Your doc on ${fromDomain} is almost there ✨`,
+      `Finish that sentence on ${fromDomain} 💬`,
+      `Don’t let ${toDomain} steal your writing flow ✍️`
+    ],
+    neutral: [
+      `You're doing great—don't lose focus! 💪`,
+      `Back to ${fromDomain}, you're almost done ⏳`,
+      `${toDomain} can wait. ${fromDomain} matters now. 🚀`
+    ]
+  };
+
+  const selected = baseNudges[taskType] || baseNudges.neutral;
+  return selected[Math.floor(Math.random() * selected.length)];
+}
+
+function detectContext(domain) {
+  domain = domain.toLowerCase();
+  if (domain.includes('git') || domain.includes('stack') || domain.includes('code')) return 'coding';
+  if (domain.includes('notion') || domain.includes('doc') || domain.includes('write')) return 'writing';
+  if (domain.includes('learn') || domain.includes('study') || domain.includes('academy')) return 'study';
+  return 'neutral';
+}
+
+function extractDomain(url) {
   try {
-    const response = await fetchGeminiAPI(prompt);
-    const nudge = processNudgeResponse(response);
-    NUDGE_CACHE.set(cacheKey, nudge);
-    return nudge;
-  } catch (error) {
-    console.error("Gemini API error:", error);
-    return generateFallbackNudge(fromUrl);
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'unknown';
   }
-}
-
-function buildGeminiPrompt(fromUrl, toUrl, context) {
-  return `Generate a 15-25 word nudge to refocus from ${extractDomain(toUrl)} back to ${extractDomain(fromUrl)}.
-Context: 
-- Working on: ${context.taskType || 'task'} 
-- Streak: ${context.streak || 0} days
-- Tone: ${context.tonePreference || 'supportive'}
-Format: "Your [task] on [domain] needs... [emoji]"`;
-}
-
-async function fetchGeminiAPI(prompt) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 50
-        }
-      })
-    }
-  );
-  return await response.json();
 }
