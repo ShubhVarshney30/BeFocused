@@ -1,6 +1,6 @@
-/* Enhanced Tab & Focus Monitor - background.js v4.0 */
+/* Enhanced Tab & Focus Monitor - background.js v4.2 */
 import { classifySite } from './services/classifier.js';
-import { getPersonalizedNudge } from './services/gemini.js';
+import { getDeepSeekNudge } from './services/deepseek.js'; // Changed from gemini.js
 
 // Constants
 const TIME_WINDOW_MINUTES = 20;
@@ -15,6 +15,7 @@ const NO_DISTRACTION_REWARD_INTERVAL = 60 * 60 * 1000;
 const NO_DISTRACTION_REWARD_POINTS = 15;
 const NOTIFICATION_COOLDOWN = 1000 * 60 * 5; // 5 minutes
 const NUDGE_COOLDOWN = 1000 * 60 * 10; // 10 minutes between nudges
+const MIN_DISTRACTION_DURATION = 5000; // 5 seconds minimum to record
 
 // State variables
 let tabSwitchTimestamps = [];
@@ -122,7 +123,7 @@ function recordDistractionTime() {
   if (!currentDistraction.url || !currentDistraction.startTime) return;
 
   const duration = Date.now() - currentDistraction.startTime;
-  if (duration >= 5000) { // Only record if >5 seconds
+  if (duration >= MIN_DISTRACTION_DURATION) {
     updateDistractionStats(currentDistraction.url, duration);
   }
 }
@@ -138,7 +139,8 @@ async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
     // Only generate nudge if cooldown has passed
     if (Date.now() - lastNudgeTime > NUDGE_COOLDOWN) {
       try {
-        nudge = await getPersonalizedNudge(fromUrl, toUrl);
+        // Simplified nudge generation with DeepSeek
+        nudge = await getDeepSeekNudge(fromUrl, toUrl);
         lastNudgeTime = Date.now();
       } catch (error) {
         console.error("Nudge generation failed:", error);
@@ -163,7 +165,7 @@ async function handlePotentialDistraction(fromUrl, toUrl, toTitle) {
   }
 }
 
-// Stats Management
+// Stats Management (unchanged from original)
 async function updateDistractionStats(url, duration) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
@@ -202,7 +204,6 @@ async function updateDistractionStats(url, duration) {
   await chrome.storage.local.set({ distractionStats: stats });
   await applyProductivitySystems(stats);
 }
-
 async function applyProductivitySystems(stats) {
   const today = new Date().toDateString();
   const data = await chrome.storage.local.get([
@@ -361,3 +362,60 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     chrome.storage.local.set({ tabSwitchCount: 0 });
   }
 });
+
+// Helper function for excessive tab switching
+function handleExcessiveTabSwitching(count) {
+  chrome.storage.local.get(['alertsEnabled'], (data) => {
+    if (data.alertsEnabled !== false && Date.now() - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+      showNotification(
+        '🔄 Too Many Tab Switches',
+        `You've switched tabs ${count} times in ${TIME_WINDOW_MINUTES} minutes. Try to focus!`
+      );
+      lastNotificationTime = Date.now();
+    }
+  });
+}
+
+// Helper function to reset daily stats
+async function resetDailyStats() {
+  const today = new Date().toDateString();
+  const data = await chrome.storage.local.get(['distractionStats', 'userPoints']);
+  
+  // Archive yesterday's stats
+  const trendData = data.distractionStatsTrend || [];
+  trendData.push({
+    date: new Date(Date.now() - 86400000).toDateString(),
+    totalTime: Object.values(data.distractionStats || {}).reduce((sum, site) => sum + (site.today || 0), 0)
+  });
+  
+  // Reset for new day
+  await chrome.storage.local.set({
+    distractionStats: {},
+    totalPenaltyToday: 0,
+    lastReset: today,
+    distractionStatsTrend: trendData.slice(-7) // Keep last 7 days
+  });
+}
+
+// Helper function to update trend stats
+function updateTrendStats(currentStats) {
+  chrome.storage.local.get(['distractionStatsTrend'], (data) => {
+    const trendData = data.distractionStatsTrend || [];
+    const today = new Date().toDateString();
+    
+    // Update today's entry if exists, or create new
+    const todayIndex = trendData.findIndex(d => d.date === today);
+    const totalToday = Object.values(currentStats).reduce((sum, site) => sum + (site.today || 0), 0);
+    
+    if (todayIndex >= 0) {
+      trendData[todayIndex].totalTime = totalToday;
+    } else {
+      trendData.push({
+        date: today,
+        totalTime: totalToday
+      });
+    }
+    
+    chrome.storage.local.set({ distractionStatsTrend: trendData.slice(-7) }); // Keep last 7 days
+  });
+}

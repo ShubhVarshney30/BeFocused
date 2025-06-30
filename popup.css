@@ -198,4 +198,83 @@
     min-height: 36px;
     padding-bottom: 8px;
   }
-  
+
+  /* AI Insights Styles */
+  .ai-label {
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .ai-label.productive {
+    background: rgba(46, 125, 50, 0.1);
+    color: #2e7d32;
+  }
+
+  .ai-label.neutral {
+    background: rgba(2, 136, 209, 0.1);
+    color: #0288d1;
+  }
+
+  .ai-label.distraction {
+    background: rgba(211, 47, 47, 0.1);
+    color: #d32f2f;
+  }
+
+  .ai-nudge {
+    padding: 8px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-style: italic;
+  }
+
+  .productive-nudge {
+    border-left: 3px solid #2e7d32;
+  }
+
+  .neutral-nudge {
+    border-left: 3px solid #0288d1;
+  }
+
+  .distraction-nudge {
+    border-left: 3px solid #d32f2f;
+  }
+
+  .no-data, .error {
+    font-size: 13px;
+    text-align: center;
+    padding: 8px;
+  }
+
+  .error {
+    color: var(--warning);
+  }
+
+  /* Dark mode overrides for AI elements */
+  body.dark-mode .ai-label.productive {
+    background: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+  }
+
+  body.dark-mode .ai-label.neutral {
+    background: rgba(2, 136, 209, 0.2);
+    color: #4fc3f7;
+  }
+
+  body.dark-mode .ai-label.distraction {
+    background: rgba(211, 47, 47, 0.2);
+    color: #e57373;
+  }
+
+  body.dark-mode .productive-nudge {
+    border-left-color: #81c784;
+  }
+
+  body.dark-mode .neutral-nudge {
+    border-left-color: #4fc3f7;
+  }
+
+  body.dark-mode .distraction-nudge {
+    border-left-color: #e57373;
+  }
