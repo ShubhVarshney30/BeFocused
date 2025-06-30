@@ -1,32 +1,32 @@
-// stats.js
-
 const toggle = document.getElementById('darkModeToggle');
 
-// Load saved theme
+// Dark mode toggle logic
 chrome.storage.local.get('darkMode', (data) => {
   if (data.darkMode) {
     document.body.classList.add('dark');
     toggle.checked = true;
   }
 });
-
 toggle.addEventListener('change', () => {
   const isDark = toggle.checked;
   document.body.classList.toggle('dark', isDark);
   chrome.storage.local.set({ darkMode: isDark });
 });
 
-// Load stats and render chart
+// Load and display today's stats only
 chrome.storage.local.get([
   'tabSwitchCount',
   'longestFocusStreak',
   'warpTriggeredDays',
-  'userPoints'
+  'userPoints',
+  'totalPenaltyToday'
 ], (data) => {
   const switchCount = data.tabSwitchCount || 0;
   const streak = data.longestFocusStreak || 0;
   const warpDays = data.warpTriggeredDays || {};
   const points = data.userPoints || 0;
+  const penalty = data.totalPenaltyToday || 0;
+  const netPoints = points - penalty;
 
   const today = new Date().toISOString().split("T")[0];
   const todayTriggers = warpDays[today] || 0;
@@ -34,31 +34,32 @@ chrome.storage.local.get([
   document.getElementById('tabSwitches').innerText = switchCount;
   document.getElementById('focusStreak').innerText = `${streak} min`;
   document.getElementById('warpDays').innerText = `${todayTriggers} times today`;
+  document.getElementById('pointsEarned').innerText = `${points} pts`;
+  document.getElementById('penaltyToday').innerText = `${penalty} coins`;
+  document.getElementById('netPoints').innerText = `${netPoints}`;
 
-  // Optional: Add points display if using a stat block
-  const pointsEl = document.getElementById('pointsEarned');
-  if (pointsEl) {
-    pointsEl.innerText = `${points} pts`;
+  if (typeof Chart === 'undefined') {
+    console.error("Chart.js not loaded. Make sure chart.min.js is included in stats.html.");
+    return;
   }
 
-  new Chart(document.getElementById('usageChart'), {
+  // 🟢 Today's Focus vs Distraction Pie Chart
+  new Chart(document.getElementById('usageChart').getContext('2d'), {
     type: 'doughnut',
     data: {
       labels: ['Focused Time', 'Distracted Time'],
       datasets: [{
-        data: [streak, switchCount / 3],
+        data: [streak, switchCount / 3], // Approximating distraction time
         backgroundColor: ['#4caf50', '#f44336']
       }]
     },
     options: {
       responsive: true,
       plugins: {
-        legend: {
-          position: 'bottom'
-        },
+        legend: { position: 'bottom' },
         title: {
           display: true,
-          text: 'Focus vs Distraction'
+          text: 'Focus vs Distraction (Today)'
         }
       }
     }

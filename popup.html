@@ -1,270 +1,571 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Focus Dashboard</title>
-  <link rel="stylesheet" href="popup.css" />
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      padding: 16px;
-      width: 340px;
-      background: linear-gradient(to bottom right, #e3f2fd, #ffffff);
-      color: #1a237e;
+    :root {
+      --primary: #0072ff;
+      --primary-light: #00c6ff;
+      --success: #43a047;
+      --danger: #e53935;
+      --warning: #ff9800;
+      --text: #1a237e;
+      --text-light: #424242;
+      --bg: linear-gradient(to bottom right, #e3f2fd, #ffffff);
+      --card-bg: #ffffff;
+      --border: #e0e0e0;
+      --shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
+
+    .dark-mode {
+      --primary: #64b5f6;
+      --primary-light: #00acc1;
+      --success: #81c784;
+      --danger: #e57373;
+      --warning: #ffb74d;
+      --text: #e3f2fd;
+      --text-light: #b0bec5;
+      --bg: linear-gradient(to bottom right, #121212, #1e1e1e);
+      --card-bg: #1e1e1e;
+      --border: #333;
+      --shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 16px;
+      width: 360px;
+      background: var(--bg);
+      color: var(--text);
+      transition: all 0.3s ease;
+      margin: 0;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 12px 0;
+      color: var(--primary);
+    }
+
     h1 {
       font-size: 22px;
-      margin-bottom: 14px;
-      color: #0d47a1;
       text-align: center;
+      margin-bottom: 16px;
     }
+
+    h2 {
+      font-size: 18px;
+    }
+
     .section {
-      margin-bottom: 18px;
-      background: #ffffff;
+      margin-bottom: 16px;
+      background: var(--card-bg);
       border-radius: 14px;
-      padding: 16px 18px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      position: relative;
+      transition: all 0.3s ease;
     }
+
+    .section.minimized {
+      padding: 12px 16px;
+    }
+
+    .section.minimized > *:not(h2, .minimize-btn) {
+      display: none;
+    }
+
+    .minimize-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-weight: bold;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+
+    .minimize-btn:hover {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
     .counter-number {
-      font-size: 30px;
+      font-size: 32px;
       font-weight: bold;
       text-align: center;
+      margin: 8px 0;
+      color: var(--primary);
     }
+
     .status-message {
       text-align: center;
-      margin-top: 8px;
+      margin: 8px 0;
+      font-size: 14px;
     }
+
     .status-message.warning {
-      color: #e53935;
+      color: var(--danger);
     }
+
     .toggle-section {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
+
     .toggle-wrapper {
       display: flex;
       align-items: center;
+      gap: 8px;
     }
-    .toggle-label {
-      margin-left: 10px;
-      font-weight: 500;
-    }
+
     input[type="checkbox"] {
-      transform: scale(1.3);
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
     }
-    #pointsDisplay, #penaltyDisplay, #netPointsDisplay, #streakDisplay {
-      font-size: 15px;
-      font-weight: 600;
-      margin: 6px 0;
+
+    .stats-display {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 12px 0;
     }
-    #penaltyDisplay { color: #d32f2f; }
-    #netPointsDisplay { color: #0072ff; }
-    #streakDisplay { color: #4caf50; }
-    #wastedTimeDisplay {
+
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
       font-size: 14px;
-      color: #424242;
-      margin-top: 8px;
-      text-align: center;
     }
+
+    .stat-value {
+      font-weight: 600;
+    }
+
+    #motivationStatus {
+      font-weight: bold;
+      font-size: 14px;
+      text-align: center;
+      margin: 12px 0 8px;
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(0, 114, 255, 0.1);
+    }
+
     #sprintCountdown {
-      font-size: 24px;
+      font-size: 28px;
       font-weight: bold;
       text-align: center;
-      margin-bottom: 10px;
-      color: #0072ff;
+      margin: 12px 0;
+      color: var(--primary);
       animation: pulse 1.2s ease-in-out infinite;
     }
-    #sprintTimerContainer {
-      text-align: center;
-      animation: glowBreath 2.5s ease-in-out infinite;
-    }
+
     #sprintProgress {
       width: 100%;
-      height: 14px;
-      border-radius: 10px;
+      height: 12px;
+      border-radius: 6px;
       overflow: hidden;
-      background: #e0e0e0;
+      background: var(--border);
+      margin-bottom: 12px;
     }
+
+    #sprintProgress::-webkit-progress-bar {
+      background: var(--border);
+    }
+
     #sprintProgress::-webkit-progress-value {
-      background: linear-gradient(to right, #00c6ff, #0072ff);
-      animation: progressGlow 2s linear infinite;
+      background: linear-gradient(to right, var(--primary-light), var(--primary));
+      transition: width 0.5s ease;
     }
+
     button {
       width: 100%;
-      padding: 10px;
+      padding: 10px 16px;
       border: none;
-      border-radius: 10px;
-      font-size: 16px;
+      border-radius: 8px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
-      margin-bottom: 10px;
-      transition: transform 0.2s ease;
-      box-shadow: 0 0 12px rgba(0, 114, 255, 0.25);
+      margin: 8px 0;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
-    #startSprintBtn {
-      background: linear-gradient(to right, #00c853, #43a047);
-      color: white;
-    }
-    #stopSprintBtn {
-      background: linear-gradient(to right, #e53935, #b71c1c);
-      color: white;
-      display: none;
-    }
-    #resetStatsBtn {
-      background: #cfd8dc;
-      color: #37474f;
-    }
-    button:hover {
-      transform: scale(1.03);
-    }
-    .link-button {
-      display: block;
-      text-align: center;
-      margin-top: 12px;
-      color: #0072ff;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.05); opacity: 0.85; }
-    }
-    @keyframes glowBreath {
-      0% { box-shadow: 0 0 10px rgba(0, 114, 255, 0.2); }
-      50% { box-shadow: 0 0 25px rgba(0, 114, 255, 0.5); }
-      100% { box-shadow: 0 0 10px rgba(0, 114, 255, 0.2); }
-    }
-    @keyframes progressGlow {
-      0%, 100% { box-shadow: 0 0 6px rgba(0, 114, 255, 0.3); }
-      50% { box-shadow: 0 0 12px rgba(0, 114, 255, 0.5); }
-    }
-    .warning-animate {
-      animation: shake 0.4s ease-in-out 3;
-    }
-    @keyframes shake {
-      0% { transform: translateX(0); }
-      25% { transform: translateX(-5px); }
-      50% { transform: translateX(5px); }
-      75% { transform: translateX(-5px); }
-      100% { transform: translateX(0); }
-    }
-    /* .fm-wrap, .fm-block {
-      box-sizing: border-box;
-      font-family: system-ui, sans-serif;
-      padding: 20px;
-      text-align: center;
-    } */
 
-    #fm-site,#fm-minutes,
-    .fm-wrap button {
-      width: 100%;
-      margin: 6px 0;
-      padding: 8px;
+    button.primary {
+      background: linear-gradient(to right, var(--success), #2e7d32);
+      color: white;
+    }
+
+    button.danger {
+      background: linear-gradient(to right, var(--danger), #c62828);
+      color: white;
     }
 
     button.secondary {
-      background: #ececec;
-      color: #333;
+      background: var(--border);
+      color: var(--text);
     }
 
-    .small {
-      font-size: 0.85rem;
-      opacity: 0.75;
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
 
+    button:active {
+      transform: translateY(0);
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 8px 0;
+      background: var(--card-bg);
+      color: var(--text);
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    /* AI Insights Styles */
+    .ai-insights {
+      background: rgba(255, 245, 230, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 15px;
+    }
+
+    .ai-nudge {
+      font-style: italic;
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .distraction-nudge {
+      color: #d32f2f;
+      font-weight: 500;
+    }
+
+    .distraction-flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    .distraction-flow .from {
+      color: #4CAF50;
+    }
+
+    .distraction-flow .to {
+      color: #F44336;
+    }
+
+    .distraction-flow .arrow {
+      opacity: 0.6;
+    }
+
+    .distraction-flow .time {
+      margin-left: auto;
+      opacity: 0.7;
+      font-size: 11px;
+    }
+
+    .dark-mode-toggle {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      50% { transform: translateX(4px); }
+      75% { transform: translateX(-4px); }
+      100% { transform: translateX(0); }
+    }
+
+    .warning-animate {
+      animation: shake 0.4s ease-in-out 3;
+    }
+
+    /* Chart Containers */
+    .chart-container {
+      height: 200px;
+      margin: 12px 0;
+    }
+
+    /* Session List Styles */
+    .session-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .domain-badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: white;
+    }
+
+    .session-time {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .session-duration {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    /* View Navigation */
+    #mainStatsView {
+      display: block;
+    }
+
+    #detailedStatsView, #domainDetailView {
+      display: none;
+    }
+
+    /* Domain Session Timeline */
+    .domain-session {
+      margin: 8px 0;
+    }
+
+    .session-time {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .session-bar-container {
+      height: 20px;
+      background: var(--border);
+      border-radius: 4px;
+      margin: 4px 0;
+      overflow: hidden;
+    }
+
+    .session-bar {
+      height: 100%;
+      background: var(--primary);
+      color: white;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      padding-left: 4px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
- 
+  <div class="dark-mode-toggle">
+    <label for="darkModeToggle">🌙</label>
+    <input type="checkbox" id="darkModeToggle">
+  </div>
+
   <h1>🧠 Focus Dashboard</h1>
-  <div class="section minimized">
-    <h1>Tab Switches Count</h1>
-    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
-    <p style="text-align:center;">Tab switches in last 20 min:</p>
-    <p id="tabCount" class="counter-number">0</p>
-    <p id="statusMessage" class="status-message">You're doing great!</p>
-    <p id="motivationStatus" style="font-weight: bold; font-size: 14px; text-align:center; color: #0072ff;">
-      ✨ Stay focused and watch yourself rise!
-    </p>
-  </div>
 
-  <!-- <h1></h1> -->
-  <div class="section toggle-section minimized">
-    <h1>Features</h1>
-    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
-    <div class="toggle-wrapper">
-      <input type="checkbox" id="toggleAlert"/>
-      <label class="toggle-label">Tab Switch Alerts</label>
+  <!-- Main Stats View -->
+  <div id="mainStatsView">
+    <!-- Productivity Overview Section -->
+    <div class="section">
+      <h2>Productivity Overview</h2>
+      <p style="text-align:center;">Tab switches in last 20 min:</p>
+      <p id="tabCount" class="counter-number">0</p>
+      <p id="statusMessage" class="status-message">You're doing great!</p>
+      
+      <div class="stats-display">
+        <div class="stat-item">
+          <span>Points:</span>
+          <span id="pointsDisplay" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span>Penalty:</span>
+          <span id="penaltyDisplay" class="stat-value" style="color: var(--danger);">0</span>
+        </div>
+        <div class="stat-item">
+          <span>Net Points:</span>
+          <span id="netPointsDisplay" class="stat-value" style="color: var(--primary);">0</span>
+        </div>
+        <div class="stat-item">
+          <span>Streak:</span>
+          <span id="streakDisplay" class="stat-value" style="color: var(--success);">0 days</span>
+        </div>
+      </div>
+      
+      <p id="motivationStatus">✨ Stay focused and watch yourself rise!</p>
     </div>
-    <div class="toggle-wrapper">
-      <input type="checkbox" id="toggleWarp"/>
-      <label class="toggle-label">Interuption while scrolling</label>
+
+    <!-- AI Insights Section -->
+    <div class="section">
+      <h2>🤖 AI Insights</h2>
+      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
+      
+      <div class="ai-insights">
+        <div><strong>Current behavior:</strong> <span id="aiClassification">Analyzing...</span></div>
+        <div id="aiNudge" class="ai-nudge"></div>
+        <div id="aiDetails" class="ai-details"></div>
+      </div>
     </div>
-    <div class="toggle-wrapper">
-      <input type="checkbox" id="toggleBlur"/>
-      <label class="toggle-label">Blur YouTube Thumbnails</label>
+
+    <!-- Focus Sprint Section -->
+    <div class="section minimized">
+      <h2>Focus Sprint</h2>
+      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
+      
+      <button id="startSprintBtn" class="primary">🎯 Start 25-Minute Sprint</button>
+      <button id="stopSprintBtn" class="danger" style="display: none;">🛑 Stop Sprint</button>
+
+      <div id="sprintTimerContainer" style="display: none;">
+        <div id="sprintCountdown">25:00</div>
+        <progress id="sprintProgress" max="1500" value="0"></progress>
+      </div>
     </div>
-  </div>
 
- 
-  <div class="section minimized">
-    <h1>Focus Sprint</h1>
-    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
-    <p id="pointsDisplay">Points: 0</p>
-    <p id="penaltyDisplay">Today's Penalty: 0</p>
-    <p id="netPointsDisplay">Net Points: 0</p>
-    <p id="streakDisplay">��Streak: 0 days</p>
-
-    <button id="startSprintBtn">🎯 Start Sprint</button>
-    <button id="stopSprintBtn">🛑 Stop Sprint</button>
-
-    
-
-    <div id="sprintTimerContainer" style="display:none;margin-top:10px;">
-      <p id="sprintCountdown">25:00</p>
-      <progress id="sprintProgress" max="1500" value="0"></progress>
-    </div>
-  </div>
-    <div class="section minimized" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
-      <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
+    <!-- Focus Mode Section -->
+    <div class="section minimized">
       <h2>🎯 Focus Mode</h2>
-
+      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
+      
       <label>Allowed domain or URL</label>
       <input id="fm-site" type="text" placeholder="example.com or https://docs.example.com">
-    
+      
       <label>Duration (minutes)</label>
-      <input id="fm-minutes" type="number" min="1" placeholder="25">
-    
-      <button id="fm-start">Start</button>
-      <button id="fm-stop" class="secondary">Stop / Reset</button>
-    
-      <p id="fm-status" class="small"></p>
+      <input id="fm-minutes" type="number" min="1" placeholder="25" value="25">
+      
+      <button id="fm-start" class="primary">Start Focus Mode</button>
+      <button id="fm-stop" class="secondary">Stop Focus Mode</button>
+      
+      <p id="fm-status" style="font-size: 13px; text-align: center; margin-top: 8px;"></p>
     </div>
 
-  <div class="section minimized" id="feed-notify-section" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
-    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
-    <h2>⏰ Feed Notify</h2>
-    <label for="feed-minutes">Notify me after (minutes):</label>
-    <input id="feed-minutes" type="number" min="1" placeholder="Enter minutes" style="width: 100%; margin: 6px 0; padding: 8px;">
-    <button id="feed-save-btn">Save</button>
-    <p id="feed-status" class="small"></p>
+    <!-- Settings Section -->
+    <div class="section minimized">
+      <h2>⚙️ Settings</h2>
+      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
+      
+      <div class="toggle-section">
+        <div class="toggle-wrapper">
+          <input type="checkbox" id="toggleAlert" checked>
+          <label for="toggleAlert">Tab Switch Alerts</label>
+        </div>
+        <div class="toggle-wrapper">
+          <input type="checkbox" id="toggleWarp" checked>
+          <label for="toggleWarp">Interruption Prevention</label>
+        </div>
+        <div class="toggle-wrapper">
+          <input type="checkbox" id="toggleBlur" checked>
+          <label for="toggleBlur">Blur YouTube Thumbnails</label>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>⏰ Feed Notify</h3>
+      <label for="feed-minutes">Notify me after (minutes):</label>
+      <input id="feed-minutes" type="number" min="1" placeholder="30">
+      <button id="feed-save-btn" class="secondary">Save Notification Setting</button>
+      <p id="feed-status" style="font-size: 13px; text-align: center; margin-top: 8px;"></p>
+    </div>
+
+    <!-- Distraction Stats Section -->
+    <div class="section minimized">
+      <h2>📊 Distraction Stats</h2>
+      <button class="minimize-btn" aria-label="Minimize section"><span>−</span></button>
+      
+      <div id="wastedTimeDisplay" style="text-align: center; margin: 12px 0;">Loading data...</div>
+      <div id="distractionDetails" style="font-size: 13px; margin: 8px 0;"></div>
+      <div id="todayVsAverage" style="font-size: 13px; margin: 8px 0;"></div>
+      <button id="viewDetailsBtn" class="secondary">View Detailed Stats</button>
+      <button id="resetStatsBtn" class="secondary">Reset Stats</button>
+    </div>
   </div>
 
-  <div class="section minimized">
-    <button class="minimize-btn" aria-label="Maximize section"><span>+</span></button>
-    <h2 style="font-size:16px; margin-bottom:6px; text-align:center;">📉 Distraction Stats</h2>
-    <div id="wastedTimeDisplay">Loading...</div>
-    <button id="resetStatsBtn">Reset Stats</button>
-  </div>
-  <div style="position: absolute; z-index: 100; padding-bottom: 5px;">
-    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-      <input type="checkbox" id="darkModeToggle" style="accent-color: #222; width: 18px; height: 18px;"> <span style="font-size: 16px;">🌙 Dark Mode</span>
-    </label>
+  <!-- Detailed Stats View -->
+  <div id="detailedStatsView">
+    <div class="section">
+      <h2>📈 Trend Analysis</h2>
+      <div id="trendChart" class="chart-container"></div>
+      <button id="backToMainBtn" class="secondary">← Back to Overview</button>
+    </div>
+
+    <div class="section">
+      <h2>⏱ Recent Sessions</h2>
+      <div id="sessionList"></div>
+      <button id="viewDomainsBtn" class="secondary">View by Domain →</button>
+    </div>
   </div>
 
-  <!-- <a href="stats.html" target="_blank" class="link-button">📊 View Full Stats</a> -->
+  <!-- Domain Detail View -->
+  <div id="domainDetailView">
+    <div class="section">
+      <h2 id="domainDetailName"></h2>
+      <div class="stats-display">
+        <div class="stat-item">
+          <span>Total Time:</span>
+          <span id="domainTotalTime" class="stat-value">0 minutes</span>
+        </div>
+        <div class="stat-item">
+          <span>Today:</span>
+          <span id="domainTodayTime" class="stat-value">0 minutes</span>
+        </div>
+        <div class="stat-item">
+          <span>Visits:</span>
+          <span id="domainVisitCount" class="stat-value">0</span>
+        </div>
+      </div>
+      
+      <h3>Recent Sessions</h3>
+      <div id="domainSessionTimeline"></div>
+      <button id="backFromDomainBtn" class="secondary">← Back to Stats</button>
+    </div>
+
+    <div class="section">
+      <h2>Time Distribution</h2>
+      <div id="domainChart" class="chart-container"></div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

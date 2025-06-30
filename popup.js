@@ -1,29 +1,484 @@
 /* ------------------------------------------------------------------
-   Tab & Focus Monitor – popup.js
+   Enhanced Tab & Focus Monitor – popup.js v3.2
    ------------------------------------------------------------------
-   Handles:
-   • Tab‑switch counter, alert toggles
-   • 25‑minute Focus Sprint timer (Pomodoro‑style)
-   • Points, distraction‑time display, reset button
-   • Mini Chart.js doughnut showing today's focus vs distraction
-   • YouTube Thumbnail Blur toggle (NEW ✅)
+   Features:
+   • Comprehensive distraction statistics with interactive charts
+   • Enhanced Pomodoro timer with floating controls
+   • Advanced focus mode with site blocking
+   • Points system with rewards/penalties
+   • Dark mode and UI customization
+   • AI-powered insights and nudges
    ------------------------------------------------------------------ */
 
-const SPRINT_DURATION = 25 * 60;
-let sprintIntervalId = null;
-let remainingTime = SPRINT_DURATION;
+// Constants
+const SPRINT_DURATION = 25 * 60; // 25 minutes in seconds
+const NOTIFICATION_DELAY = 3000; // 3 seconds for status messages
+const STATS_UPDATE_INTERVAL = 2000; // 2 seconds
+const TREND_CHART_COLORS = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f'];
 
-function updateSprintButtons(running) {
-  document.getElementById('startSprintBtn').style.display = running ? 'none' : 'inline-block';
-  document.getElementById('stopSprintBtn').style.display = running ? 'inline-block' : 'none';
-  document.getElementById('sprintTimerContainer').style.display = running ? 'block' : 'none';
+// State variables
+let sprintIntervalId = null;
+let statsUpdateInterval = null;
+let remainingTime = SPRINT_DURATION;
+let currentHost = '';
+let focusModeActive = false;
+
+// DOM Elements
+const elements = {
+  sprint: {
+    startBtn: document.getElementById('startSprintBtn'),
+    stopBtn: document.getElementById('stopSprintBtn'),
+    timerContainer: document.getElementById('sprintTimerContainer'),
+    countdown: document.getElementById('sprintCountdown'),
+    progress: document.getElementById('sprintProgress')
+  },
+  stats: {
+    tabCount: document.getElementById('tabCount'),
+    statusMessage: document.getElementById('statusMessage'),
+    points: document.getElementById('pointsDisplay'),
+    penalty: document.getElementById('penaltyDisplay'),
+    netPoints: document.getElementById('netPointsDisplay'),
+    motivation: document.getElementById('motivationStatus'),
+    wastedTime: document.getElementById('wastedTimeDisplay'),
+    distractionDetails: document.getElementById('distractionDetails'),
+    todayVsAverage: document.getElementById('todayVsAverage'),
+    trendChart: document.getElementById('trendChart'),
+    domainChart: document.getElementById('domainChart'),
+    sessionList: document.getElementById('sessionList')
+  },
+  toggles: {
+    alert: document.getElementById('toggleAlert'),
+    warp: document.getElementById('toggleWarp'),
+    blur: document.getElementById('toggleBlur'),
+    darkMode: document.getElementById('darkModeToggle')
+  },
+  focusMode: {
+    siteInput: document.getElementById('fm-site'),
+    minutesInput: document.getElementById('fm-minutes'),
+    startBtn: document.getElementById('fm-start'),
+    stopBtn: document.getElementById('fm-stop'),
+    status: document.getElementById('fm-status')
+  },
+  views: {
+    mainView: document.getElementById('mainStatsView'),
+    detailView: document.getElementById('detailedStatsView'),
+    domainView: document.getElementById('domainDetailView')
+  },
+  buttons: {
+    viewDetails: document.getElementById('viewDetailsBtn'),
+    viewDomains: document.getElementById('viewDomainsBtn'),
+    backToMain: document.getElementById('backToMainBtn'),
+    backFromDomain: document.getElementById('backFromDomainBtn')
+  },
+  aiInsights: {
+    classification: document.getElementById('aiClassification'),
+    nudge: document.getElementById('aiNudge'),
+    details: document.getElementById('aiDetails')
+  }
+};
+
+// Initialize the popup
+document.addEventListener('DOMContentLoaded', async () => {
+  initializeUI();
+  setupEventListeners();
+  await loadInitialState();
+  setupFocusMode();
+  setupStorageListeners();
+  startStatsUpdates();
+});
+
+// Core Functions
+function initializeUI() {
+  // Set up collapsible sections
+  document.querySelectorAll('.minimize-btn').forEach(btn => {
+    btn.addEventListener('click', toggleSection);
+  });
+
+  // Initialize charts
+  initializeCharts();
 }
 
-function updateSprintUI() {
-  const mins = String(Math.floor(remainingTime / 60)).padStart(2, '0');
-  const secs = String(remainingTime % 60).padStart(2, '0');
-  document.getElementById('sprintCountdown').textContent = `${mins}:${secs}`;
-  document.getElementById('sprintProgress').value = SPRINT_DURATION - remainingTime;
+function initializeCharts() {
+  // Trend chart canvas
+  elements.stats.trendChart.innerHTML = '<canvas id="trendCanvas"></canvas>';
+  
+  // Domain chart canvas
+  elements.stats.domainChart.innerHTML = '<canvas id="domainCanvas"></canvas>';
+}
+
+async function loadInitialState() {
+  // Load all initial data in parallel
+  const [
+    sprintData, 
+    statsData, 
+    settingsData,
+    focusData,
+    aiData,
+    trendData
+  ] = await Promise.all([
+    chrome.storage.local.get(['sprintActive', 'sprintEnd']),
+    chrome.storage.local.get([
+      'tabSwitchCount', 'userPoints', 'totalPenaltyToday', 
+      'dailyStreak', 'distractionStats'
+    ]),
+    chrome.storage.local.get(['alertsEnabled', 'timeWarpEnabled', 'darkMode']),
+    chrome.storage.local.get(['focusHost', 'focusEnd']),
+    chrome.storage.local.get(['lastAIClassification', 'lastAINudge', 'lastDistraction']),
+    chrome.storage.local.get(['distractionStatsTrend'])
+  ]);
+
+  // Initialize sprint
+  if (sprintData.sprintActive && sprintData.sprintEnd) {
+    const now = Math.floor(Date.now() / 1000);
+    remainingTime = Math.max(0, sprintData.sprintEnd - now);
+    if (remainingTime > 0) startSprintUI();
+  }
+
+  // Update stats display
+  updateStatsDisplay(statsData);
+  
+  // Update distraction stats with detailed view
+  updateDistractionDisplay(statsData.distractionStats || {});
+  updateTrendDisplay(trendData.distractionStatsTrend || []);
+
+  // Set toggle states
+  elements.toggles.alert.checked = settingsData.alertsEnabled !== false;
+  elements.toggles.warp.checked = settingsData.timeWarpEnabled !== false;
+  if (settingsData.darkMode) {
+    document.body.classList.add('dark-mode');
+    elements.toggles.darkMode.checked = true;
+  }
+
+  // Set focus mode if active
+  if (focusData.focusHost && focusData.focusEnd && Date.now() < focusData.focusEnd) {
+    showFocusStatus(focusData.focusHost, focusData.focusEnd);
+    focusModeActive = true;
+  }
+
+  // Set AI insights
+  if (aiData.lastAIClassification) {
+    elements.aiInsights.classification.textContent = aiData.lastAIClassification;
+  }
+  
+  if (aiData.lastAINudge) {
+    elements.aiInsights.nudge.textContent = aiData.lastAINudge;
+    
+    // Add visual distinction for distraction type
+    if (aiData.lastAIClassification === 'distraction') {
+      elements.aiInsights.nudge.classList.add('distraction-nudge');
+    }
+  }
+
+  if (aiData.lastDistraction) {
+    elements.aiInsights.details.innerHTML = `
+      <div class="distraction-flow">
+        <span class="from">${extractRootDomain(aiData.lastDistraction.from)}</span>
+        <span class="arrow">→</span>
+        <span class="to">${extractRootDomain(aiData.lastDistraction.to)}</span>
+        <span class="time">${new Date(aiData.lastDistraction.timestamp).toLocaleTimeString()}</span>
+      </div>
+    `;
+  }
+}
+
+function extractRootDomain(url) {
+  try {
+    let domain = new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
+    domain = domain.replace('www.', '');
+    const parts = domain.split('.');
+    return parts.length > 2 ? parts.slice(-2).join('.') : domain;
+  } catch {
+    return url;
+  }
+}
+
+function startStatsUpdates() {
+  // Update immediately
+  updateStats();
+  
+  // Set up periodic updates
+  statsUpdateInterval = setInterval(updateStats, STATS_UPDATE_INTERVAL);
+}
+
+async function updateStats() {
+  const [stats, trend] = await Promise.all([
+    chrome.storage.local.get([
+      'tabSwitchCount', 'userPoints', 'totalPenaltyToday', 
+      'dailyStreak', 'distractionStats'
+    ]),
+    chrome.storage.local.get(['distractionStatsTrend'])
+  ]);
+  
+  updateStatsDisplay(stats);
+  updateDistractionDisplay(stats.distractionStats || {});
+  updateTrendDisplay(trend.distractionStatsTrend || []);
+}
+
+function updateStatsDisplay(data) {
+  const count = data.tabSwitchCount || 0;
+  elements.stats.tabCount.textContent = count;
+  elements.stats.statusMessage.textContent = 
+    count > 10 ? '⚠️ You switched too much!' : "You're doing great!";
+
+  const points = data.userPoints || 0;
+  const penalty = data.totalPenaltyToday || 0;
+  const netPoints = points - penalty;
+
+  elements.stats.points.textContent = points;
+  elements.stats.penalty.textContent = penalty;
+  elements.stats.netPoints.textContent = netPoints;
+
+  updateMotivationMessage(netPoints, data.dailyStreak || 0);
+}
+
+function updateMotivationMessage(netPoints, streak) {
+  const status = elements.stats.motivation;
+  if (netPoints < 0) {
+    status.textContent = '😓 You seem distracted. Let\'s bounce back!';
+    status.classList.add('warning-animate');
+    setTimeout(() => status.classList.remove('warning-animate'), 2000);
+  } else if (netPoints >= 100) {
+    status.textContent = streak > 7 ? '🏆 Legendary focus streak!' : '👑 You\'re unstoppable!';
+  } else if (netPoints >= 50) {
+    status.textContent = '🚀 Keep growing — you\'re doing great!';
+  } else if (streak > 3) {
+    status.textContent = `🔥 ${streak}-day streak! Keep it up!`;
+  } else {
+    status.textContent = '✨ Stay focused and watch yourself rise!';
+  }
+}
+
+function updateDistractionDisplay(stats) {
+  if (!stats || Object.keys(stats).length === 0) {
+    elements.stats.wastedTime.textContent = 'No distraction data yet. Great going! ✨';
+    elements.stats.distractionDetails.innerHTML = '';
+    return;
+  }
+
+  let totalMs = 0;
+  const sites = [];
+  
+  // Calculate total time and prepare site list
+  for (const [domain, data] of Object.entries(stats)) {
+    totalMs += data.total || 0;
+    sites.push({
+      domain,
+      minutes: Math.round(data.total / 60000),
+      todayMinutes: Math.round((data.today || 0) / 60000),
+      visits: data.count || 0,
+      sessions: data.sessions || []
+    });
+  }
+
+  const totalMinutes = Math.round(totalMs / 60000);
+  elements.stats.wastedTime.textContent = `Total distracted time: ${totalMinutes} minutes`;
+  
+  // Sort by most time wasted
+  sites.sort((a, b) => b.minutes - a.minutes);
+  
+  // Create detailed breakdown
+  let detailsHTML = '<div style="margin-top: 8px;"><strong>Top Distractions:</strong><ul style="margin: 4px 0; padding-left: 20px;">';
+  
+  sites.slice(0, 3).forEach(site => {
+    detailsHTML += `<li>${site.domain}: ${site.minutes} mins (${site.visits} visits)</li>`;
+  });
+  
+  if (sites.length > 3) {
+    detailsHTML += `<li>+ ${sites.length - 3} more sites</li>`;
+  }
+  
+  detailsHTML += '</ul></div>';
+  elements.stats.distractionDetails.innerHTML = detailsHTML;
+
+  // Update domain chart
+  updateDomainChart(sites.slice(0, 5));
+
+  // Update session list
+  updateSessionList(sites);
+}
+
+function updateTrendDisplay(trendData) {
+  if (!trendData || trendData.length === 0) return;
+  
+  const labels = trendData.map(day => 
+    new Date(day.date).toLocaleDateString([], { weekday: 'short' }));
+  const data = trendData.map(day => Math.round(day.totalTime / 60000));
+  
+  updateTrendChart(labels, data);
+
+  // Calculate today vs average
+  if (trendData.length > 1) {
+    const today = trendData[trendData.length - 1];
+    const pastDays = trendData.slice(0, -1);
+    const avg = pastDays.reduce((sum, day) => sum + day.totalTime, 0) / pastDays.length;
+    
+    const diff = today.totalTime - avg;
+    let comparison = '';
+    
+    if (diff > 0) {
+      comparison = `📈 ${Math.round(diff/60000)}m more than average`;
+      elements.stats.todayVsAverage.style.color = '#e15759';
+    } else if (diff < 0) {
+      comparison = `📉 ${Math.round(Math.abs(diff)/60000)}m less than average`;
+      elements.stats.todayVsAverage.style.color = '#59a14f';
+    } else {
+      comparison = '🟰 Same as average';
+      elements.stats.todayVsAverage.style.color = '#4e79a7';
+    }
+    
+    elements.stats.todayVsAverage.innerHTML = `
+      <strong>Today:</strong> ${Math.round(today.totalTime/60000)}m | 
+      <strong>Avg:</strong> ${Math.round(avg/60000)}m<br>
+      ${comparison}
+    `;
+  }
+}
+
+function updateSessionList(sites) {
+  // Flatten all sessions from all sites
+  const allSessions = [];
+  sites.forEach(site => {
+    site.sessions.forEach(session => {
+      allSessions.push({
+        domain: site.domain,
+        time: new Date(session.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        duration: Math.round(session.duration / 60000)
+      });
+    });
+  });
+
+  // Sort by most recent
+  allSessions.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+  // Display last 5 sessions
+  elements.stats.sessionList.innerHTML = allSessions.slice(0, 5).map(session => `
+    <div class="session-item">
+      <span class="domain-badge" style="background-color: ${getDomainColor(session.domain)}">
+        ${session.domain}
+      </span>
+      <span class="session-time">${session.time}</span>
+      <span class="session-duration">${session.duration}m</span>
+    </div>
+  `).join('');
+}
+
+function updateTrendChart(labels, data) {
+  const canvas = elements.stats.trendChart.querySelector('canvas');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const chart = Chart.getChart(ctx);
+  
+  if (chart) {
+    chart.data.labels = labels;
+    chart.data.datasets = [{
+      label: 'Distraction Time',
+      data: data,
+      borderColor: '#4e79a7',
+      backgroundColor: 'rgba(78, 121, 167, 0.1)',
+      tension: 0.3,
+      fill: true
+    }];
+    chart.update();
+  } else {
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Distraction Time',
+          data: data,
+          borderColor: '#4e79a7',
+          backgroundColor: 'rgba(78, 121, 167, 0.1)',
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Minutes' } }
+        }
+      }
+    });
+  }
+}
+
+function updateDomainChart(domains) {
+  const canvas = elements.stats.domainChart.querySelector('canvas');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const chart = Chart.getChart(ctx);
+  
+  if (chart) {
+    chart.data.labels = domains.map(d => d.domain);
+    chart.data.datasets = [{
+      data: domains.map(d => d.todayMinutes),
+      backgroundColor: domains.map(d => getDomainColor(d.domain)),
+      borderWidth: 1
+    }];
+    chart.update();
+  } else {
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: domains.map(d => d.domain),
+        datasets: [{
+          data: domains.map(d => d.todayMinutes),
+          backgroundColor: domains.map(d => getDomainColor(d.domain)),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'right' },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const domain = domains.find(d => d.domain === context.label);
+                return [
+                  `${context.label}: ${context.raw}m`,
+                  `Total: ${domain.minutes}m | Visits: ${domain.visits}`
+                ];
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function getDomainColor(domain) {
+  const hash = Array.from(domain).reduce(
+    (hash, char) => char.charCodeAt(0) + (hash << 6) + (hash << 16) - hash, 0);
+  return TREND_CHART_COLORS[Math.abs(hash) % TREND_CHART_COLORS.length];
+}
+
+// Sprint Timer Functions
+function startSprintUI() {
+  updateSprintButtons(true);
+  updateSprintUI();
+
+  if (sprintIntervalId) clearInterval(sprintIntervalId);
+  sprintIntervalId = setInterval(() => {
+    remainingTime--;
+    updateSprintUI();
+    if (remainingTime <= 0) {
+      stopSprint();
+      // Reward for completing sprint
+      chrome.storage.local.get(['userPoints'], (data) => {
+        const newPoints = (data.userPoints || 0) + 10;
+        chrome.storage.local.set({ userPoints: newPoints });
+        showTempStatus('+10 points for completing your sprint!', 'success');
+      });
+    }
+  }, 1000);
+
+  injectFloatingStopAndBlocker();
 }
 
 function stopSprint() {
@@ -34,11 +489,40 @@ function stopSprint() {
   chrome.storage.local.set({ sprintActive: false, sprintEnd: null });
   updateSprintButtons(false);
 
-  document.getElementById('sprintCountdown').textContent = '25:00';
-  document.getElementById('sprintProgress').value = 0;
+  elements.sprint.countdown.textContent = '25:00';
+  elements.sprint.progress.value = 0;
 
-  chrome.tabs.query({}, (tabs) => {
-    for (const tab of tabs) {
+  removeFloatingButtons();
+}
+
+function updateSprintUI() {
+  const mins = String(Math.floor(remainingTime / 60)).padStart(2, '0');
+  const secs = String(remainingTime % 60).padStart(2, '0');
+  elements.sprint.countdown.textContent = `${mins}:${secs}`;
+  elements.sprint.progress.value = SPRINT_DURATION - remainingTime;
+}
+
+function updateSprintButtons(running) {
+  elements.sprint.startBtn.style.display = running ? 'none' : 'block';
+  elements.sprint.stopBtn.style.display = running ? 'block' : 'none';
+  elements.sprint.timerContainer.style.display = running ? 'block' : 'none';
+}
+
+// Content Script Injection
+function injectFloatingStopAndBlocker() {
+  chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }, (tabs) => {
+    tabs.forEach(tab => {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['contentScripts/floatingButton.js']
+      }).catch(err => console.error('Injection failed:', err));
+    });
+  });
+}
+
+function removeFloatingButtons() {
+  chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }, (tabs) => {
+    tabs.forEach(tab => {
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
@@ -46,319 +530,328 @@ function stopSprint() {
           if (btn) btn.remove();
         }
       });
-    }
+    });
   });
 }
 
-function startSprintUI() {
-  updateSprintButtons(true);
-  updateSprintUI();
-
-  if (sprintIntervalId) clearInterval(sprintIntervalId);
-  sprintIntervalId = setInterval(() => {
-    remainingTime--;
-    updateSprintUI();
-    if (remainingTime <= 0) stopSprint();
-  }, 1000);
+// Focus Mode Functions
+function setupFocusMode() {
+  elements.focusMode.startBtn.addEventListener('click', startFocusMode);
+  elements.focusMode.stopBtn.addEventListener('click', stopFocusMode);
 }
 
-function restoreSprintState() {
-  chrome.storage.local.get(['sprintActive', 'sprintEnd'], data => {
-    if (data.sprintActive && data.sprintEnd) {
-      const now = Math.floor(Date.now() / 1000);
-      remainingTime = Math.max(0, data.sprintEnd - now);
-      if (remainingTime > 0) startSprintUI();
-      else chrome.storage.local.set({ sprintActive: false });
-    } else {
-      updateSprintButtons(false);
-    }
+function startFocusMode() {
+  const host = extractHostname(elements.focusMode.siteInput.value);
+  const mins = parseInt(elements.focusMode.minutesInput.value, 10);
+
+  if (!host || !mins || mins <= 0) {
+    showTempStatus('Enter a valid domain/URL and time.', 'error');
+    return;
+  }
+
+  const end = Date.now() + mins * 60_000;
+  chrome.storage.local.set({ 
+    focusHost: host, 
+    focusEnd: end,
+    distractionStats: {}
+  }, () => {
+    showFocusStatus(host, end);
+    focusModeActive = true;
+    updateDistractionDisplay({});
+    applyFocusModeToTabs(host);
   });
 }
 
-function drawMiniChart() {
-  chrome.storage.local.get('distractionStats', (data) => {
-    const stats = data.distractionStats || {};
-    let totalMs = 0;
-    Object.values(stats).forEach(obj => { totalMs += obj.total || 0; });
+function stopFocusMode() {
+  chrome.storage.local.remove(['focusHost', 'focusEnd'], () => {
+    elements.focusMode.status.textContent = "Focus Mode disabled.";
+    focusModeActive = false;
+    removeFocusModeRestrictions();
+  });
+}
 
-    const distractedMin = Math.round(totalMs / 60000);
-    const focusedMin = Math.max(0, 25 - distractedMin);
+function showFocusStatus(host, end) {
+  elements.focusMode.status.textContent = 
+    `Only "${host}" allowed until ${new Date(end).toLocaleTimeString()}.`;
+}
 
-    new Chart(document.getElementById('miniChart'), {
-      type: 'doughnut',
-      data: {
-        labels: ['Focused', 'Distracted'],
-        datasets: [{
-          data: [focusedMin, distractedMin],
-          backgroundColor: ['#4caf50', '#f44336'],
-        }]
-      },
-      options: {
-        responsive: true,
-        cutout: '70%',
-        plugins: {
-          legend: { position: 'bottom' },
-          title: {
-            display: true,
-            text: 'Todays Focus Ratio',
-            font: { size: 14 }
-          }
-        }
+function applyFocusModeToTabs(host) {
+  chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }, (tabs) => {
+    tabs.forEach(tab => {
+      if (!tab.url.includes(host)) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (allowedHost) => {
+            if (!window.location.hostname.includes(allowedHost)) {
+              document.body.innerHTML = `
+                <div style="
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  height: 100vh; 
+                  font-size: 20px; 
+                  color: red; 
+                  font-family: sans-serif; 
+                  text-align: center;
+                  padding: 20px;
+                ">
+                  🚫 Focus Mode Active. Only ${allowedHost} is allowed.
+                </div>
+              `;
+            }
+          },
+          args: [host]
+        });
       }
     });
   });
 }
 
-function injectFloatingStopAndBlocker() {
-  chrome.tabs.query({}, (tabs) => {
-    for (const tab of tabs) {
+function removeFocusModeRestrictions() {
+  chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }, (tabs) => {
+    tabs.forEach(tab => {
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
-          if (!document.getElementById('floatingStopBtn')) {
-            const stopBtn = document.createElement('button');
-            stopBtn.id = 'floatingStopBtn';
-            stopBtn.textContent = '🛑 Stop Sprint';
-            Object.assign(stopBtn.style, {
-              position: 'fixed',
-              bottom: '20px',
-              right: '20px',
-              padding: '10px 16px',
-              fontSize: '14px',
-              zIndex: '100000',
-              backgroundColor: '#e53935',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer'
-            });
-            stopBtn.onclick = () => {
-              chrome.storage.local.set({ sprintActive: false });
-              stopBtn.remove();
-            };
-            document.body.appendChild(stopBtn);
-          }
-
-          const url = window.location.href;
-          const host = window.location.hostname;
-          const pathname = window.location.pathname;
-
-          const isYouTubeShorts = host.includes('youtube.com') && pathname.startsWith('/shorts');
-          const isInstagramReels = host.includes('instagram.com') && pathname.includes('/reels');
-          const isFacebookWatch = host.includes('facebook.com') && pathname.includes('/watch');
-          const isNetflix = host.includes('netflix.com');
-
-          if (isYouTubeShorts || isInstagramReels || isFacebookWatch || isNetflix) {
-            document.body.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-size: 20px; color: red; font-family: sans-serif; text-align: center;">🚫 This content is blocked during Focus Sprint. Please return to study.</div>';
+          if (document.body.textContent.includes('Focus Mode Active')) {
+            window.location.reload();
           }
         }
       });
-    }
+    });
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  restoreSprintState();
-
-  chrome.storage.local.get([
-    'tabSwitchCount', 'userPoints', 'alertsEnabled', 'timeWarpEnabled',
-    'distractionStats', 'totalPenaltyToday', 'dailyStreak'
-  ], (data) => {
-    const count = data.tabSwitchCount || 0;
-    document.getElementById('tabCount').textContent = count;
-    document.getElementById('statusMessage').textContent =
-      count > 10 ? '⚠️ You switched too much!' : "You're doing great!";
-
-    const points = data.userPoints || 0;
-    const penalty = data.totalPenaltyToday || 0;
-    const netPoints = points - penalty;
-
-    document.getElementById('pointsDisplay').textContent = `Points: ${points}`;
-    document.getElementById('penaltyDisplay').textContent = `Today's Penalty: ${penalty}`;
-    document.getElementById('netPointsDisplay').textContent = `Net Points: ${netPoints}`;
-
-    const status = document.getElementById('motivationStatus');
-    if (netPoints < 0) {
-      status.textContent = '😓 You seem distracted. Let\'s bounce back!';
-      status.classList.add('warning-animate');
-      setTimeout(() => status.classList.remove('warning-animate'), 2000);
-    } else if (netPoints >= 100) {
-      status.textContent = '👑 You\'re unstoppable!';
-    } else if (netPoints >= 20) {
-      status.textContent = '🚀 Keep growing — you\'re doing great!';
-    } else {
-      status.textContent = '✨ Stay focused and watch yourself rise!';
-    }
-
-    document.getElementById('toggleAlert').checked = data.alertsEnabled ?? true;
-    document.getElementById('toggleWarp').checked = data.timeWarpEnabled ?? true;
+// View Navigation Functions
+function setupViewNavigation() {
+  elements.buttons.viewDetails.addEventListener('click', () => {
+    elements.views.mainView.style.display = 'none';
+    elements.views.detailView.style.display = 'block';
   });
 
-  chrome.storage.sync.get('blurEnabled', (data) => {
-    document.getElementById('toggleBlur').checked = data.blurEnabled ?? true;
+  elements.buttons.viewDomains.addEventListener('click', () => {
+    elements.views.mainView.style.display = 'none';
+    elements.views.domainView.style.display = 'block';
   });
 
-  document.getElementById('toggleAlert').addEventListener('change', (e) =>
-    chrome.storage.local.set({ alertsEnabled: e.target.checked })
-  );
-
-  document.getElementById('toggleWarp').addEventListener('change', (e) =>
-    chrome.storage.local.set({ timeWarpEnabled: e.target.checked })
-  );
-
-  document.getElementById('toggleBlur').addEventListener('change', (e) => {
-    const enabled = e.target.checked;
-    chrome.storage.sync.set({ blurEnabled: enabled });
+  elements.buttons.backToMain.addEventListener('click', () => {
+    elements.views.detailView.style.display = 'none';
+    elements.views.mainView.style.display = 'block';
   });
 
-  document.getElementById('startSprintBtn').addEventListener('click', () => {
-    remainingTime = SPRINT_DURATION;
-    const sprintEnd = Math.floor(Date.now() / 1000) + remainingTime;
-    chrome.storage.local.set({ sprintActive: true, sprintEnd });
-    startSprintUI();
-    injectFloatingStopAndBlocker();
+  elements.buttons.backFromDomain.addEventListener('click', () => {
+    elements.views.domainView.style.display = 'none';
+    elements.views.mainView.style.display = 'block';
   });
+}
 
-  document.getElementById('stopSprintBtn').addEventListener('click', stopSprint);
-
-  document.getElementById('resetStatsBtn').addEventListener('click', () => {
-    chrome.storage.local.set({ distractionStats: {} }, () => {
-      document.getElementById('wastedTimeDisplay').textContent =
-        'Time wasted today: 0 min across 0 sites.';
-      drawMiniChart();
-    });
-  });
-
-  chrome.storage.local.get('distractionStats', (data) => {
-    let totalMs = 0;
-    const stats = data.distractionStats || {};
-    Object.values(stats).forEach(obj => { totalMs += obj.total || 0; });
-
-    if (Object.keys(stats).length === 0) {
-      document.getElementById('wastedTimeDisplay').textContent = 'No distraction data yet. Great going! ✨';
-    } else {
-      const minutes = Math.round(totalMs / 60000);
-      document.getElementById('wastedTimeDisplay').textContent =
-        `Time wasted today: ${minutes} min across ${Object.keys(stats).length} sites.`;
-    }
-
-    drawMiniChart();
-  });
-
-  // Feed Notify logic
-  const feedMinutesInput = document.getElementById('feed-minutes');
-  const feedSaveBtn = document.getElementById('feed-save-btn');
-  const feedStatus = document.getElementById('feed-status');
-
-  // Load saved value on popup open
-  chrome.storage.local.get('feedNotifyMinutes', (data) => {
-    if (data.feedNotifyMinutes) {
-      feedMinutesInput.value = data.feedNotifyMinutes;
-    }
-  });
-
-  feedSaveBtn.addEventListener('click', () => {
-    const minutes = parseInt(feedMinutesInput.value, 10);
-    if (!minutes || minutes < 1) {
-      feedStatus.textContent = 'Please enter a valid number of minutes.';
-      feedStatus.style.color = 'red';
-      return;
-    }
-    chrome.storage.local.set({ feedNotifyMinutes: minutes }, () => {
-      feedStatus.textContent = 'Feed Notify interval saved!';
-      feedStatus.style.color = 'green';
-      setTimeout(() => { feedStatus.textContent = ''; }, 2000);
-    });
-  });
-
-  // Dark mode logic
-  const darkToggle = document.getElementById('darkModeToggle');
-  chrome.storage.local.get('darkMode', (data) => {
-    if (data.darkMode) {
-      document.body.classList.add('dark-mode');
-      darkToggle.checked = true;
-    }
-  });
-  darkToggle.addEventListener('change', (e) => {
-    if (e.target.checked) {
-      document.body.classList.add('dark-mode');
-      chrome.storage.local.set({ darkMode: true });
-    } else {
-      document.body.classList.remove('dark-mode');
-      chrome.storage.local.set({ darkMode: false });
-    }
-  });
-
-  // Minimize/maximize logic for sections (default minimized)
-  document.querySelectorAll('.minimize-btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      const section = btn.closest('.section, .fm-wrap.section');
-      if (!section) return;
-      section.classList.toggle('minimized');
-      const icon = btn.querySelector('span');
-      if (section.classList.contains('minimized')) {
-        icon.textContent = '+';
-        btn.setAttribute('aria-label', 'Maximize section');
-      } else {
-        icon.textContent = '−';
-        btn.setAttribute('aria-label', 'Minimize section');
-      }
-    });
-  });
-});
-
-
-
-// focusmode js editition
-
-/* Focus Mode – popup controller (hostname edition) */
-const siteEl   = document.getElementById("fm-site");
-const minsEl   = document.getElementById("fm-minutes");
-const startBtn = document.getElementById("fm-start");
-const stopBtn  = document.getElementById("fm-stop");
-const statusEl = document.getElementById("fm-status");
-
-/* ── utilities ──────────────────────────────────────────────── */
+// Utility Functions
 function extractHostname(input) {
-  // Accept bare domain or full URL
   try {
     if (!/^[a-z][a-z\d+\-.]*:\/\//i.test(input)) {
       input = "https://" + input.trim();
     }
-    return new URL(input).hostname;
+    return new URL(input).hostname.replace('www.', '');
   } catch {
     return "";
   }
 }
 
-function showStatus(host, end) {
-  statusEl.textContent =
-    `Only "${host}" allowed until ${new Date(end).toLocaleTimeString()}.`;
+function showTempStatus(message, type = 'success') {
+  const status = document.getElementById('statusMessage');
+  status.textContent = message;
+  status.style.color = type === 'error' ? 'var(--danger)' : 'var(--success)';
+  setTimeout(() => { status.textContent = ''; }, NOTIFICATION_DELAY);
 }
 
-/* ── load active session (if any) ───────────────────────────── */
-(async () => {
-  const { focusHost, focusEnd } = await chrome.storage.local.get(["focusHost", "focusEnd"]);
-  if (focusHost && focusEnd && Date.now() < focusEnd) showStatus(focusHost, focusEnd);
-})();
-
-/* ── actions ────────────────────────────────────────────────── */
-startBtn.onclick = async () => {
-  const host = extractHostname(siteEl.value);
-  const mins = parseInt(minsEl.value, 10);
-
-  if (!host || !mins || mins <= 0) {
-    alert("Enter a valid domain/URL and time.");
-    return;
+function toggleSection(e) {
+  const section = e.currentTarget.closest('.section');
+  if (!section) return;
+  
+  section.classList.toggle('minimized');
+  const icon = e.currentTarget.querySelector('span');
+  
+  if (section.classList.contains('minimized')) {
+    icon.textContent = '+';
+    e.currentTarget.setAttribute('aria-label', 'Maximize section');
+  } else {
+    icon.textContent = '−';
+    e.currentTarget.setAttribute('aria-label', 'Minimize section');
   }
+}
 
-  const end = Date.now() + mins * 60_000;
-  await chrome.storage.local.set({ focusHost: host, focusEnd: end });
-  showStatus(host, end);
-};
+// Event Listeners
+function setupEventListeners() {
+  // Sprint controls
+  elements.sprint.startBtn.addEventListener('click', () => {
+    remainingTime = SPRINT_DURATION;
+    const sprintEnd = Math.floor(Date.now() / 1000) + remainingTime;
+    chrome.storage.local.set({ sprintActive: true, sprintEnd });
+    startSprintUI();
+  });
 
-stopBtn.onclick = async () => {
-  await chrome.storage.local.remove(["focusHost", "focusEnd"]);
-  statusEl.textContent = "Focus Mode disabled.";
-};
+  elements.sprint.stopBtn.addEventListener('click', stopSprint);
 
+  // Toggles
+  elements.toggles.alert.addEventListener('change', (e) => 
+    chrome.storage.local.set({ alertsEnabled: e.target.checked })
+  );
+
+  elements.toggles.warp.addEventListener('change', (e) => 
+    chrome.storage.local.set({ timeWarpEnabled: e.target.checked })
+  );
+
+  elements.toggles.blur.addEventListener('change', (e) => 
+    chrome.storage.sync.set({ blurEnabled: e.target.checked })
+  );
+
+  elements.toggles.darkMode.addEventListener('change', (e) => {
+    document.body.classList.toggle('dark-mode', e.target.checked);
+    chrome.storage.local.set({ darkMode: e.target.checked });
+  });
+
+  // Stats reset
+  document.getElementById('resetStatsBtn').addEventListener('click', () => {
+    chrome.storage.local.set({ 
+      distractionStats: {},
+      totalPenaltyToday: 0
+    }, () => {
+      updateDistractionDisplay({});
+      showTempStatus('Stats reset successfully!', 'success');
+      chrome.storage.local.get(['userPoints'], (data) => {
+        elements.stats.penalty.textContent = '0';
+        elements.stats.netPoints.textContent = data.userPoints || 0;
+      });
+    });
+  });
+
+  // View navigation
+  setupViewNavigation();
+
+  // Session list interactions
+  elements.stats.sessionList.addEventListener('click', (e) => {
+    const domainBadge = e.target.closest('.domain-badge');
+    if (domainBadge) {
+      const domain = domainBadge.textContent.trim();
+      showDomainDetails(domain);
+    }
+  });
+}
+
+function showDomainDetails(domain) {
+  elements.views.detailView.style.display = 'none';
+  elements.views.domainView.style.display = 'block';
+  
+  chrome.storage.local.get(['distractionStats'], (data) => {
+    const domainData = data.distractionStats?.[domain];
+    if (!domainData) return;
+    
+    document.getElementById('domainDetailName').textContent = domain;
+    document.getElementById('domainTotalTime').textContent = 
+      `${Math.round(domainData.total / 60000)} minutes total`;
+    document.getElementById('domainTodayTime').textContent = 
+      `${Math.round(domainData.today / 60000)} minutes today`;
+    document.getElementById('domainVisitCount').textContent = 
+      `${domainData.count} visits`;
+    
+    renderDomainSessions(domainData.sessions || []);
+  });
+}
+
+function renderDomainSessions(sessions) {
+  const container = document.getElementById('domainSessionTimeline');
+  container.innerHTML = '';
+  
+  sessions.slice(0, 10).forEach(session => {
+    const durationMins = Math.round(session.duration / 60000);
+    const time = new Date(session.start).toLocaleTimeString([], { 
+      hour: '2-digit', minute: '2-digit' 
+    });
+    
+    const sessionEl = document.createElement('div');
+    sessionEl.className = 'domain-session';
+    sessionEl.innerHTML = `
+      <div class="session-time">${time}</div>
+      <div class="session-bar-container">
+        <div class="session-bar" style="width: ${Math.min(durationMins * 5, 100)}%">
+          ${durationMins}m
+        </div>
+      </div>
+    `;
+    container.appendChild(sessionEl);
+  });
+}
+
+// Storage Listeners
+function setupStorageListeners() {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    // Update distraction stats
+    if (changes.distractionStats) {
+      updateDistractionDisplay(changes.distractionStats.newValue || {});
+    }
+
+    // Update points display
+    if (changes.userPoints || changes.totalPenaltyToday) {
+      chrome.storage.local.get(['userPoints', 'totalPenaltyToday'], (data) => {
+        elements.stats.points.textContent = data.userPoints || 0;
+        elements.stats.penalty.textContent = data.totalPenaltyToday || 0;
+        elements.stats.netPoints.textContent = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
+      });
+    }
+
+    // Update streak
+    if (changes.dailyStreak) {
+      chrome.storage.local.get(['userPoints', 'totalPenaltyToday', 'dailyStreak'], (data) => {
+        const netPoints = (data.userPoints || 0) - (data.totalPenaltyToday || 0);
+        updateMotivationMessage(netPoints, data.dailyStreak || 0);
+      });
+    }
+
+    // Update tab switch count
+    if (changes.tabSwitchCount) {
+      elements.stats.tabCount.textContent = changes.tabSwitchCount.newValue || 0;
+      elements.stats.statusMessage.textContent = 
+        changes.tabSwitchCount.newValue > 10 ? '⚠️ You switched too much!' : "You're doing great!";
+    }
+
+    // Update AI insights
+    if (changes.lastAIClassification) {
+      elements.aiInsights.classification.textContent = changes.lastAIClassification.newValue;
+    }
+    
+    if (changes.lastAINudge) {
+      elements.aiInsights.nudge.textContent = changes.lastAINudge.newValue;
+      
+      if (changes.lastAIClassification?.newValue === 'distraction') {
+        elements.aiInsights.nudge.classList.add('distraction-nudge');
+      } else {
+        elements.aiInsights.nudge.classList.remove('distraction-nudge');
+      }
+    }
+
+    if (changes.lastDistraction) {
+      const data = changes.lastDistraction.newValue;
+      elements.aiInsights.details.innerHTML = `
+        <div class="distraction-flow">
+          <span class="from">${extractRootDomain(data.from)}</span>
+          <span class="arrow">→</span>
+          <span class="to">${extractRootDomain(data.to)}</span>
+          <span class="time">${new Date(data.timestamp).toLocaleTimeString()}</span>
+        </div>
+      `;
+    }
+
+    // Update trend data
+    if (changes.distractionStatsTrend) {
+      updateTrendDisplay(changes.distractionStatsTrend.newValue || []);
+    }
+  });
+}
+
+// Clean up
+window.addEventListener('unload', () => {
+  if (sprintIntervalId) clearInterval(sprintIntervalId);
+  if (statsUpdateInterval) clearInterval(statsUpdateInterval);
+});

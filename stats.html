@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Focus Stats</title>
+  <title>📊 Focus Stats</title>
   <link rel="stylesheet" href="stats.css" />
   <script src="chart.min.js"></script>
 </head>
@@ -30,12 +30,26 @@
       <strong>Time-Warp Triggered:</strong>
       <p id="warpDays">0 times today</p>
     </div>
+    <div class="stat">
+      <strong>Total Points:</strong>
+      <p id="pointsEarned">0 pts</p>
+    </div>
+    <div class="stat">
+      <strong>Today's Penalty:</strong>
+      <p id="penaltyToday">0 coins</p>
+    </div>
+    <div class="stat">
+      <strong>Net Points:</strong>
+      <p id="netPoints">0</p>
+    </div>
   </div>
 
-  <canvas id="usageChart"></canvas>
+  <h2>🎯 Focus vs Distraction Today</h2>
+  <canvas id="usageChart" width="320" height="320"></canvas>
+
   <a class="back" href="popup.html">← Back to Popup</a>
 
-  <!-- ✅ ONLY reference external JS here -->
+  <!-- JS logic at end for best performance -->
   <script src="stats.js"></script>
 </body>
 </html>

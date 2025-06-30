@@ -17,7 +17,8 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup.html"
@@ -29,19 +30,18 @@
     {
       "matches": [
         "*://www.youtube.com/*",
-      "*://x.com/*",
-      "*://www.instagram.com/*",
-      "*://www.reddit.com/*",
-      "*://www.tiktok.com/*"
+        "*://x.com/*",
+        "*://www.instagram.com/*",
+        "*://www.reddit.com/*",
+        "*://www.tiktok.com/*"
       ],
-      "js": [
-    "intentionalFeed.js"],
+      "js": ["intentionalFeed.js"],
       "run_at": "document_idle"
     },
-     {
-       "matches": ["<all_urls>"],
-       "js": ["focusContent.js"],
-       "run_at": "document_start"
+    {
+      "matches": ["<all_urls>"],
+      "js": ["focusContent.js"],
+      "run_at": "document_start"
     },
     {
       "matches": ["<all_urls>"],
@@ -67,7 +67,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "focusblock.html", 
+        "focusblock.html",
         "focustyle.css",
         "stats.html",
         "stats.js",
